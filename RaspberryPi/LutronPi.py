@@ -28,15 +28,19 @@ SSDP_PORT = 1900
 
 MS = 'M-SEARCH * HTTP/1.1\r\nHOST: %s:%d\r\nMAN: "ssdp:discover"\r\nMX: 2\r\nST: ssdp:all\r\n\r\n' % (SSDP_ADDR, SSDP_PORT)
 
-def determine_ip_for_host(host):
+def determine_ip_for_host(host = None):
     """Determine local IP address used to communicate with a particular host"""
+    
+    if (host == None):
+        print "it's null"
+        host = '192.168.1.1'
     test_sock = DatagramProtocol()
     test_sock_listener = reactor.listenUDP(0, test_sock) # pylint: disable=no-member
     test_sock.transport.connect(host, 1900)
     my_ip = test_sock.transport.getHost().host
     test_sock_listener.stopListening()
     return my_ip
-
+    
 class StringProducer(object):
     """Writes an in-memory string to a Twisted request"""
     implements(IBodyProducer)
@@ -68,11 +72,9 @@ class Base(DatagramProtocol):
         pass
         
 class StatusServer(resource.Resource):
-    """HTTP server that serves the status of the garage door to the
-       SmartThings hub"""
+    """HTTP server that handles requests from the SmartThings hub"""
     isLeaf = True
     def __init__(self, device_target, ssh):
-        garage_door_status = "closed"
         self.device_target = device_target
         self.ssh = ssh
         resource.Resource.__init__(self)
@@ -135,16 +137,18 @@ class Client(Base):
             response = SEARCH_RESPONSE % (url, search_target, UUID, self.device_target)
             self.ssdp.write(response, (host, port))
  
- #Create the SSH connection to Smart Bridge
-class SSHTest:
+#Create the SSH connection to Smart Bridge
+class smartBridgeSSH:
     shell = None
     client = None
     channel = None
     channel1 = None
     
-    def __init__(self, host, uname, pwd, keyfilepath):
+    def __init__(self, host, uname, keyfilepath, smartThingsIP):
         self.host = host
         self.uname = uname
+        self.smartThingsIP = smartThingsIP
+
         key = None
         port = 22
         keyfiletype = 'RSA'
@@ -202,31 +206,33 @@ class SSHTest:
     def notifyDevices(self, output):
         
         body = json.dumps(output)
-        host = 'http://192.168.1.19:39500/notify'
+        host = 'http://' + self.smartThingsIP + ':39500'
         agent = Agent(reactor)
         req = agent.request(
             'POST',
-            'http://192.168.1.19:39500',
+            host,
             Headers({'Content-Type': ['application/json'], 'CONTENT-LENGTH': [str(len(output))]}),
             StringProducer(output)
             )
 
-
-def main(mode, iface):
-    device_target = 'urn:schemas-upnp-org:device:RPi_Lutron_Caseta:%d' % (1)
-    klass = Server if mode == 'server' else Client
-    obj = klass(iface)
-    reactor.addSystemEventTrigger('before', 'shutdown', obj.stop)
-    ssh = SSHTest("192.168.1.22", "leap", None, 'rsa_key') 
+def main():
     
-     # HTTP site to handle subscriptions/polling
+    #Please paste in the IP Address for your Lutron Smart Bridge and for your SmartThings Hub below!!
+    smartBridgeIP = "192.168.1.22"
+    smartThingsIP = "192.168.1.19"
+    
+    
+    
+    iface = determine_ip_for_host()
+    device_target = 'urn:schemas-upnp-org:device:RPi_Lutron_Caseta:%d' % (1)
+    obj = Client(iface)
+    reactor.addSystemEventTrigger('before', 'shutdown', obj.stop)
+    ssh = smartBridgeSSH(smartBridgeIP, "leap",'rsa_key', smartThingsIP) 
+   
+    # HTTP site to handle subscriptions/polling
     status_site = server.Site(StatusServer(device_target, ssh))
     reactor.listenTCP(5000, status_site) # pylint: disable=no-member
     
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print "Usage: %s <server|client> <IP of interface>" % (sys.argv[0], )
-        sys.exit(1)
-    mode, iface = sys.argv[1:]
-    reactor.callWhenRunning(main, mode, iface)
+    reactor.callWhenRunning(main)
     reactor.run()
