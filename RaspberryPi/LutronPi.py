@@ -32,7 +32,6 @@ def determine_ip_for_host(host = None):
     """Determine local IP address used to communicate with a particular host"""
     
     if (host == None):
-        print "it's null"
         host = '192.168.1.1'
     test_sock = DatagramProtocol()
     test_sock_listener = reactor.listenUDP(0, test_sock) # pylint: disable=no-member
