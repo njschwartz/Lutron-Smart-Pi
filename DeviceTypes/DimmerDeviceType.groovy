@@ -36,7 +36,7 @@ def parse(description) {
 }
 
 def on() {
-	parent.on(this)
+	parent.setLevel(this, device.currentValue("level"))
 	sendEvent(name: "switch", value: "on")
 	log.info "Dimmer On"
 }
