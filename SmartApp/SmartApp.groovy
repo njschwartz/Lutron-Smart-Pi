@@ -341,7 +341,7 @@ def parse(description) {
         sendEvent(dni, [name: "level", value: level])
     } else {
     	sendEvent(dni, [name: "switch", value: "off"])
-        sendEvent(dni, [name: "level", value: level])
+        //sendEvent(dni, [name: "level", value: level])
     }
          
 /* Example of the response coming from Lutron Caseta through pi device type and to this method
