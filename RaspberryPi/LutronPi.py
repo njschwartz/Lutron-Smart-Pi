@@ -63,7 +63,6 @@ def determine_ip_for_host(host = None):
     """Determine local IP address used to communicate with a particular host"""
     
     if (host == None):
-        print "it's null"
         host = '192.168.1.1'
     test_sock = DatagramProtocol()
     test_sock_listener = reactor.listenUDP(0, test_sock) # pylint: disable=no-member
@@ -122,12 +121,11 @@ class StatusServer(resource.Resource):
                 return
                
             '''Get status of all devices'''
-            self.ssh.send('{"CommuniqueType":"ReadRequest","Header":{"Url":"/device"}}\n')
-            response = self.ssh.channel.recv(9999)
+            self.ssh.channel1.send('{"CommuniqueType":"ReadRequest","Header":{"Url":"/device"}}\n')
+            response = self.ssh.channel1.recv(99999)
             print "response is: " + response
-
             body = json.dumps(json.JSONDecoder().decode(response))
-            request.responseHeaders.addRawHeader(b"content-type", b"application/json")
+            request.responseHeaders.addRawHeader(b"content-type", b"application/json") 
             return body
             
 
@@ -257,7 +255,7 @@ class smartBridgeSSH:
 
 def main():
     
-    #Please paste in the IP Address for your Lutron Smart Bridge and for your SmartThings Hub below!!
+    #Please past in the IP Address for your Lutron Smart Bridge and for your SmartThings Hub below!!
     smartBridgeIP = "192.168.1.22"
     smartThingsIP = "192.168.1.19"
 
@@ -272,5 +270,11 @@ def main():
     reactor.listenTCP(5000, status_site) # pylint: disable=no-member
     
 if __name__ == "__main__":
+    '''
+    if len(sys.argv) != 3:
+        print "Usage: %s <SmartBridgeIP> <SmartThingsIP>" % (sys.argv[0], )
+        sys.exit(1)
+    smartBridgeIP, smartThingsIP = sys.argv[1:]
+    '''
     reactor.callWhenRunning(main)
     reactor.run()
