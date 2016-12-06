@@ -109,7 +109,7 @@ class StatusServer(resource.Resource):
         self.ssh = ssh
         resource.Resource.__init__(self)
  
-def render_GET(self, request): # pylint: disable=invalid-name
+    def render_GET(self, request): # pylint: disable=invalid-name
         
         """Handle polling requests from ST hub"""
         if request.path == '/status':
