@@ -109,7 +109,7 @@ class StatusServer(resource.Resource):
         self.ssh = ssh
         resource.Resource.__init__(self)
  
-    def render_GET(self, request): # pylint: disable=invalid-name
+def render_GET(self, request): # pylint: disable=invalid-name
         
         """Handle polling requests from ST hub"""
         if request.path == '/status':
@@ -123,6 +123,12 @@ class StatusServer(resource.Resource):
             '''Get status of all devices'''
             self.ssh.channel1.send('{"CommuniqueType":"ReadRequest","Header":{"Url":"/device"}}\n')
             response = self.ssh.channel1.recv(99999)
+            splitResponse = response.splitlines()
+            if len(splitResponse) == 1:
+                response = splitResponse[0]
+            else:
+                response = splitResponse[1]
+                
             print "response is: " + response
             body = json.dumps(json.JSONDecoder().decode(response))
             request.responseHeaders.addRawHeader(b"content-type", b"application/json") 
