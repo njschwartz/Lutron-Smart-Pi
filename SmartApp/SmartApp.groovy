@@ -152,7 +152,7 @@ private discoverLutronDevices() {
     	ip = it.value.ip
         port = it.value.port
     }
-
+   
 	sendHubCommand(new physicalgraph.device.HubAction([
 		method: "GET",
 		path: "/status",
@@ -163,12 +163,13 @@ private discoverLutronDevices() {
 
 //Handle device list request response from raspberry pi
 def lutronHandler(physicalgraph.device.HubResponse hubResponse) {
-    def body = hubResponse.body
+    def body = hubResponse.json
+    log.debug body
     def switches = getSwitches()
     log.debug "Adding switches to state!"
-    def slurper = new JsonSlurper()
-    def result = slurper.parseText(body)
-    def deviceList = result['Body']['Devices']
+    //def slurper = new JsonSlurper()
+    //def result = slurper.parseText(body)
+    def deviceList = body['Body']['Devices']
     
     deviceList.each { k ->
             def zone
