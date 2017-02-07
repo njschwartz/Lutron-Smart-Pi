@@ -1,5 +1,5 @@
 /**
- *  Lutron Caseta Service Manager
+ *  Lutron Caseta Service Manager 1
  *
  *  Copyright 2016 SmartThings
  *
