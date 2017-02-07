@@ -15,7 +15,7 @@
  */
 
 metadata {
-    definition (name: "Raspberry Pi Lutron Caseta", namespace: "njschwartz", author: "Nate Schwartz") {
+    definition (name: "Raspberry Pi Lutron Caseta1", namespace: "njschwartz", author: "Nate Schwartz") {
         capability "Contact Sensor"
         capability "Polling"
         capability "Refresh"
