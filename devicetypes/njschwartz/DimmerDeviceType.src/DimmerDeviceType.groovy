@@ -1,5 +1,5 @@
 metadata {
-        definition (name: "Lutron Virtual Dimmer", namespace: "smartthings", author: "Nate Schwartz") {
+        definition (name: "Lutron Virtual Dimmer", namespace: "njschwartz", author: "Nate Schwartz") {
         capability "Switch"
         capability "Refresh"
         capability "Switch Level"
