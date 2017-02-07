@@ -23,7 +23,7 @@ metadata {
 	}
 
 	tiles {
-		// TODO: define your main and details tiles here
+		// TODO: define your main and details tiles hereasdf
 	}
 }
 
