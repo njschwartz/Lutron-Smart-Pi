@@ -116,16 +116,21 @@ def ssdpHandler(evt) {
     def description = evt.description
     def hub = evt?.hubId
     def parsedEvent = parseDiscoveryMessage(description)
+  
     parsedEvent << ["hub":hub]
+    log.debug parsedEvent
     
     if (parsedEvent?.ssdpTerm?.contains("schemas-upnp-org:device:RPi_Lutron_Caseta:")) {
         def devices = getDevices()
 
-        if (!(devices."${parsedEvent.ssdpUSN.toString()}")) { //if it doesn't already exist
+        //if (!(devices."${parsedEvent.ssdpUSN.toString()}")) { //if it doesn't already exist
+        if (!(devices."${parsedEvent.mac}")) { //if it doesn't already exist
             //log.debug('Parsed Event: ' + parsedEvent)
-            devices << ["${parsedEvent.ssdpUSN.toString()}":parsedEvent]
+            //devices << ["${parsedEvent.ssdpUSN.toString()}":parsedEvent]
+            devices << ["${parsedEvent.mac}":parsedEvent]
         } else { // just update the values
-            def d = devices."${parsedEvent.ssdpUSN.toString()}"
+            //def d = devices."${parsedEvent.ssdpUSN.toString()}"
+            def d = devices."${parsedEvent.ma}"
             boolean deviceChangedValues = false
             if(d.ip != parsedEvent.ip || d.port != parsedEvent.port) {
                 d.ip = parsedEvent.ip
@@ -277,14 +282,9 @@ def lutronHandler(physicalgraph.device.HubResponse hubResponse) {
         log.debug "Adding switches to state!"
         def deviceList = body['Body']['Devices']
 		
-
         deviceList.each { k ->
             def zone
             def device
-            log.debug switches
-            log.debug state.switches
-            log.debug k.SerialNumber
-            log.debug switches[k.SerialNumber]
             
             if(k.LocalZones && k.DeviceType == "WallDimmer") {
                 zone = k.LocalZones[0].href.substring(6)
@@ -304,7 +304,8 @@ def getDevicesForDialog() {
     def map = [:]
     devices.each {
         def value = convertHexToIP(it.value.ip) + ':' + convertHexToInt(it.value.port)
-        def key = it.value.ssdpUSN.toString()
+        //def key = it.value.ssdpUSN.toString()
+        def key = it.value.mac
         map["${key}"] = value
     }
     map
@@ -313,7 +314,7 @@ def getDevicesForDialog() {
 /* Get map containing discovered devices. Maps USN to parsed event. */
 def getDevices() {
     if (!state.devices) { state.devices = [:] }
-    log.debug("There are ${state.devices.size()} devices at this time")
+    log.debug("There are ${state.devices.size()} found")
     state.devices
 }
 
@@ -324,22 +325,8 @@ def installed() {
 
 def updated() {
 	log.debug "Updated with settings: ${settings}"
-	log.debug "Seletcted swtiches are: " + settings.selectedSwitches
-    log.debug getChildDevices()
-    def d = getChildDevices()
-    log.debug d[0].deviceNetworkId
-    
-    //switches[k.SerialNumber] = [id: k.SerialNumber, name: k.Name , zone: zone, dni: "", hub: hubResponse.hubId]
-    //def deleteSwitches = getChildDevices().findAll { !settings.selectedSwitches.contains(it.deviceNetworkId)}
-    //def deleteScenes = getChildDevices().findAll { !it.deviceNetworkId.contains(settings?.selectedScenes) }
-    //log.debug "Scenes to delete are: " + deleteScenes
-    //def deletePicos = getChildDevices().findAll { !settings.selectedSwitches.contains(it.deviceNetworkId)}
 
-	//delete.each {
-    //deleteChildDevice(it.deviceNetworkId)
-	//}
-    
-    
+
 	unsubscribe()
 	initialize()
 }
@@ -347,6 +334,25 @@ def updated() {
 def initialize() {
     log.debug ('Initializing')
     
+    def selectedDevices = selectedRPi
+    if (selectedSwitches != null) {
+    	selectedDevices += selectedSwitches 
+    }
+    if (selectedPicos != null) {
+    	selectedDevices += selectedPicos 
+    }
+    if (selectedScenes != null) {
+    	selectedDevices += selectedScenes 
+    }
+    
+    log.debug "All selected devices are: " + selectedDevices
+    
+    def deleteDevices = (selectedDevices) ? (getChildDevices().findAll { !selectedDevices.contains(it.deviceNetworkId) }) : getAllChildDevices()
+    //log.debug "selected switches are: " + settings.selectedSwitches
+    //log.debug "child devices are: " + getChildDevices()
+    log.debug "DEvices to delete are: " + deleteDevices
+    deleteDevices.each { deleteChildDevice(it.deviceNetworkId) } 
+
     //If a raspberry pi was actually selected add the child device pi and child device switches
     if (selectedRPi) {
     	addBridge()
@@ -354,7 +360,8 @@ def initialize() {
         addPicos()
         addScenes() 
     }
-    
+   
+      
     unschedule()
     /* Subscribe immediately, then once every ten minutes
     schedule("0 0/10 * * * ?", subscribeToDevices)
@@ -363,7 +370,8 @@ def initialize() {
 }
 
 def addBridge() {
-	//for each of the raspberry pi's selected add as a child device
+    /*
+    //for each of the raspberry pi's selected add as a child device
 	selectedRPi.each { ssdpUSN ->
     	
         // Make the dni the MAC followed by the index from the USN
@@ -371,7 +379,9 @@ def addBridge() {
         if (ssdpUSN.endsWith(":1")) {
             dni = devices[ssdpUSN].mac
         }
-
+*/
+		selectedRPi.each { mac ->
+		def dni = devices[mac].mac
         // Check if child already exists
         def d = getAllChildDevices()?.find {
             it.device.deviceNetworkId == dni
@@ -379,16 +389,16 @@ def addBridge() {
 
         //Add the Raspberry Pi
         if (!d) {
-            def ip = devices[ssdpUSN].ip
-            def port = devices[ssdpUSN].port
-            log.debug("Adding ${dni} for ${ssdpUSN} / ${ip}:${port}")
-            d = addChildDevice("njschwartz", "Raspberry Pi Lutron Caseta", dni, devices[ssdpUSN].hub, [
+            def ip = devices[mac].ip
+            def port = devices[mac].port
+            log.debug("Adding ${dni} for ${mac} / ${ip}:${port}")
+            d = addChildDevice("njschwartz", "Raspberry Pi Lutron Caseta", dni, devices[mac].hub, [
                 "label": "PI/Caseta at: " + convertHexToIP(ip) + ':' + convertHexToInt(port),
                 "data": [
                     "ip": ip,
                     "port": port,
-                    "ssdpUSN": ssdpUSN,
-                    "ssdpPath": devices[ssdpUSN].ssdpPath
+                    "ssdpUSN": mac,
+                    "ssdpPath": devices[mac].ssdpPath
                 ]
             ])
             d.sendEvent(name: "networkAddress", value: "${ip}:${port}")
@@ -399,14 +409,15 @@ def addBridge() {
 
 def addSwitches() {
 
+    
 	selectedSwitches.each { id ->
     	def allSwitches = getSwitches()
         def name = allSwitches[id].name
         def zone = allSwitches[id].zone
   
         // Make the dni the appId + the Lutron device serial number
- 		def dni = app.id + "/" + id
-        
+ 		//def dni = app.id + "/" + id
+        def dni = id
         //add the dni to the switch state variable for future lookup
         allSwitches[id].dni = dni
 
@@ -427,6 +438,7 @@ def addSwitches() {
                 ]
             ])
         }
+        log.debug "child devices are: " + getChildDevices()
         
         //Call refresh on the new device to set the initial state
         d.refresh()
@@ -455,7 +467,8 @@ def addPicos() {
 
         if (!d) {
             log.debug("Adding ${dni} for ${id}")
-            d = addChildDevice("njschwartz", "Lutron Pico", dni, hubId, [
+            //d = addChildDevice("njschwartz", "Lutron Pico", dni, hubId, [
+            d = addChildDevice("stephack", "Lutron Pico", dni, hubId, [
                 "label": "${name}",
                 "data": [
                 	"dni": dni,
@@ -472,12 +485,6 @@ def addPicos() {
 def addScenes() {
 	def allScenes = getScenes()
     
-    
-    //device?.typeName?.equalsIgnoreCase(deviceType))) {
-    if (settings.selectedScenes) {
-    	def deleteScenes = getChildDevices().findAll { !it.deviceNetworkId.contains(settings.selectedScenes) && it.typeName.equalsIgnoreCase("Lutron Scene") }
-    	log.debug "Scenes to delete are: " + deleteScenes
-    }
 
 	selectedScenes.each { id ->
     	
@@ -593,24 +600,27 @@ def on(childDevice) {
 def refresh(childDevice) {
 
     def switches = getSwitches()
-    def split = childDevice.device.deviceNetworkId.split("/")
-    put("/status", switches[split[1]].zone, "")
+    //def split = childDevice.device.deviceNetworkId.split("/")
+    //put("/status", switches[split[1]].zone, "")
+    put("/status", switches[childDevice.device.deviceNetworkId].zone, "")
 }
 
 //Send request to turn light off (level 0)
 def off(childDevice) {
 	log.debug childDevice.device.label
     def switches = getSwitches()
-    def split = childDevice.device.deviceNetworkId.split("/")
-    put("/off", switches[split[1]].zone, '0')
+    //def split = childDevice.device.deviceNetworkId.split("/")
+    //put("/off", switches[split[1]].zone, '0')
+    put("/off", switches[childDevice.device.deviceNetworkId].zone, '0')
 }
 
 //Send request to set device to a specific level
 def setLevel(childDevice, level) {
     log.debug childDevice.data
     def switches = getSwitches()
-    def split = childDevice.device.deviceNetworkId.split("/")
-    put("/setLevel", switches[split[1]].zone, level)
+    //def split = childDevice.device.deviceNetworkId.split("/")
+    //put("/setLevel", switches[split[1]].zone, level)
+    put("/setLevel", switches[childDevice.device.deviceNetworkId].zone, level)
 }
 
 def runScene(childDevice) {
