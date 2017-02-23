@@ -445,7 +445,7 @@ def addPicos() {
         if (!d) {
             log.debug("Adding ${name} which is Device ${device} with DNI ${dni}")
             //d = addChildDevice("njschwartz", "Lutron Pico", dni, hubId, [
-            d = addChildDevice("stephack", "Lutron Pico", dni, hubId, [
+            d = addChildDevice("njschwartz", "Lutron Pico", dni, hubId, [
                 "label": "${name}",
                 "data": [
                 	"dni": dni,
