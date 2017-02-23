@@ -55,149 +55,17 @@ def parse(description) {
     if (json) {
     	parent.parse(json) 
       log.debug "Values received: ${json}"
-      //Can do stuff here in need be
     }
   }
 }
- 
- 
-/* 
-private Integer convertHexToInt(hex) {
-    Integer.parseInt(hex,16)
-}
 
-private String convertHexToIP(hex) {
-    [convertHexToInt(hex[0..1]),convertHexToInt(hex[2..3]),convertHexToInt(hex[4..5]),convertHexToInt(hex[6..7])].join(".")
-}
-
-private getHostAddress() {
-    def ip = getDataValue("ip")
-    def port = getDataValue("port")
-
-    if (!ip || !port) {
-        def parts = device.deviceNetworkId.split(":")
-        if (parts.length == 2) {
-            ip = parts[0]
-            port = parts[1]
-        } else {
-            //log.warn "Can't figure out ip and port for device: ${device.id}"
-        }
+def sync(ip, port) {
+    def existingIp = getDataValue("ip")
+    def existingPort = getDataValue("port")
+    if (ip && ip != existingIp) {
+        updateDataValue("ip", ip)
     }
-
-    //convert IP/port
-    ip = convertHexToIP(ip)
-    port = convertHexToInt(port)
-    log.debug "Using ip: ${ip} and port: ${port} for device: ${device.id}"
-    return ip + ":" + port
-}
-
-def getRequest(path) {
-    log.debug "Sending request for ${path} from ${device.deviceNetworkId}"
-
-    new physicalgraph.device.HubAction(
-        'method': 'GET',
-        'path': path,
-        'headers': [
-            'HOST': getHostAddress(),
-        ], device.deviceNetworkId)
-}
-
-def poll() {
-    log.debug "Executing 'poll' from ${device.deviceNetworkId} "
-
-    subscribeAction(getDataValue("ssdpPath"))
-}
-
-def refresh() {
-    log.debug "Executing 'refresh'"
-
-    //def path = getDataValue("ssdpPath")
-    //getRequest(path)
-    subscribeAction(getDataValue("ssdpPath"))
-}
-
-def subscribe() {
-    log.debug "Subscribe requested"
-    log.debug getDataValue("ssdpPath")
-    subscribeAction(getDataValue("ssdpPath"))
-}
-
-private def parseDiscoveryMessage(String description) {
-    def device = [:]
-    def parts = description.split(',')
-    parts.each { part ->
-        part = part.trim()
-        if (part.startsWith('devicetype:')) {
-            def valueString = part.split(":")[1].trim()
-            device.devicetype = valueString
-        } else if (part.startsWith('mac:')) {
-            def valueString = part.split(":")[1].trim()
-            if (valueString) {
-                device.mac = valueString
-            }
-        } else if (part.startsWith('networkAddress:')) {
-            def valueString = part.split(":")[1].trim()
-            if (valueString) {
-                device.ip = valueString
-            }
-        } else if (part.startsWith('deviceAddress:')) {
-            def valueString = part.split(":")[1].trim()
-            if (valueString) {
-                device.port = valueString
-            }
-        } else if (part.startsWith('ssdpPath:')) {
-            def valueString = part.split(":")[1].trim()
-            if (valueString) {
-                device.ssdpPath = valueString
-            }
-        } else if (part.startsWith('ssdpUSN:')) {
-            part -= "ssdpUSN:"
-            def valueString = part.trim()
-            if (valueString) {
-                device.ssdpUSN = valueString
-            }
-        } else if (part.startsWith('ssdpTerm:')) {
-            part -= "ssdpTerm:"
-            def valueString = part.trim()
-            if (valueString) {
-                device.ssdpTerm = valueString
-            }
-        } else if (part.startsWith('headers')) {
-            part -= "headers:"
-            def valueString = part.trim()
-            if (valueString) {
-                device.headers = valueString
-            }
-        } else if (part.startsWith('body')) {
-            part -= "body:"
-            def valueString = part.trim()
-            if (valueString) {
-                device.body = valueString
-            }
-        }
+    if (port && port != existingPort) {
+        updateDataValue("port", port)
     }
-
-    device
 }
-
-private subscribeAction(path, callbackPath="") {
-	log.debug "Subscribe Action"
-    def address = device.hub.getDataValue("localIP") + ":" + device.hub.getDataValue("localSrvPortTCP")
-    def parts = device.deviceNetworkId.split(":")
-    def ip = convertHexToIP(getDataValue("ip"))
-    def port = convertHexToInt(getDataValue("port"))
-    ip = ip + ":" + port
-    
-    log.debug path + " " + ip + " " + address
-
-    def result = new physicalgraph.device.HubAction(
-        method: "SUBSCRIBE",
-        path: path,
-        headers: [
-            HOST: ip,
-            CALLBACK: "<http://${address}/notify$callbackPath>",
-            NT: "upnp:event",
-            TIMEOUT: "Second-3600"])
-    result
-}
-*/
