@@ -6,7 +6,6 @@
 import sys
 from twisted.internet import reactor, task
 from twisted.internet.protocol import DatagramProtocol
-
 from twisted.web import server, resource
 from twisted.internet.defer import succeed
 from twisted.web.client import Agent
@@ -17,16 +16,22 @@ from zope.interface import implements
 import json
 import time
 import paramiko
+import telnetlib
 from threading import Thread
 import thread
 import StringIO
+
+#from zeroconf import ServiceBrowser, Zeroconf
+import ipaddress
 
 #No idea where this came from but I left it
 UUID = 'd1c58eb4-9220-11e4-96fa-123b93f75cba'
 SEARCH_RESPONSE = 'HTTP/1.1 200 OK\r\nCACHE-CONTROL:max-age=30\r\nEXT:\r\nLOCATION:%s\r\nSERVER:Linux, UPnP/1.0, Lutron_Pi/1.0\r\nST:%s\r\nUSN:uuid:%s::%s'
 SSDP_ADDR = '239.255.255.250'
 SSDP_PORT = 1900
-
+SMARTTHINGS_IP = "192.168.1.19"
+SMARTBRIDGE_IP = "192.168.1.47"
+PRO_BRIDGE = False
 MS = 'M-SEARCH * HTTP/1.1\r\nHOST: %s:%d\r\nMAN: "ssdp:discover"\r\nMX: 2\r\nST: ssdp:all\r\n\r\n' % (SSDP_ADDR, SSDP_PORT)
 
 my_key = """\
@@ -57,19 +62,6 @@ taGxAoGAQGFYb63lBeGS2vkUyovP2kMwBF0E6Y+3Il+TGjwPalyg+TyNzEAvkOUe
 2iy8Eul9rT6qcByzNXnNAMRHYhXDWQWmRaHM/lzyIkNr/O3UBEQKiSew/YhH6s1W
 iMwh+x+ekyFOxb98aNqlnEH/7PsQonzWThpzcAAojllTt9AIbbc=
 -----END RSA PRIVATE KEY-----"""
-
-
-def determine_ip_for_host(host = None):
-    """Determine local IP address used to communicate with a particular host"""
-    
-    if (host == None):
-        host = '192.168.1.1'
-    test_sock = DatagramProtocol()
-    test_sock_listener = reactor.listenUDP(0, test_sock) # pylint: disable=no-member
-    test_sock.transport.connect(host, 1900)
-    my_ip = test_sock.transport.getHost().host
-    test_sock_listener.stopListening()
-    return my_ip
     
 class StringProducer(object):
     """Writes an in-memory string to a Twisted request"""
@@ -102,6 +94,7 @@ class Base(DatagramProtocol):
         pass
         
 class StatusServer(resource.Resource):
+
     """HTTP server that handles requests from the SmartThings hub"""
     isLeaf = True
     def __init__(self, device_target, ssh):
@@ -110,35 +103,76 @@ class StatusServer(resource.Resource):
         resource.Resource.__init__(self)
  
     def render_GET(self, request): # pylint: disable=invalid-name
-        
         """Handle polling requests from ST hub"""
         if request.path == '/status':
             
             zone = request.content.read()
             if zone != "":
-                print "specific device refresh"
                 self.ssh.send('{"CommuniqueType":"ReadRequest","Header":{"Url":"/zone/%s/status"}}\n' % (zone))
                 return
-               
-            '''Get status of all devices'''
-            self.ssh.channel1.send('{"CommuniqueType":"ReadRequest","Header":{"Url":"/device"}}\n')
-            response = self.ssh.channel1.recv(99999)
-            splitResponse = response.splitlines()
-            if len(splitResponse) == 1:
-                response = splitResponse[0]
-            else:
-                response = splitResponse[1]
                 
-            print "response is: " + response
-            body = json.dumps(json.JSONDecoder().decode(response))
-            request.responseHeaders.addRawHeader(b"content-type", b"application/json") 
-            return body
-            
+            request.responseHeaders.addRawHeader(b"content-type", b"application/json")    
+            return self.getAllSwitches();
 
-        if request.path == '/on' or '/off' or '/setLevel':
-        
+        elif request.path == '/on' or request.path == '/off' or request.path == '/setLevel':
             zoneLevel = request.content.read().split(':')
             self.ssh.send('{"CommuniqueType":"CreateRequest","Header":{"Url":"/zone/%s/commandprocessor"},"Body":{"Command":{"CommandType":"GoToLevel","Parameter":[{"Type":"Level","Value":%s}]}}}\n' % (zoneLevel[0], zoneLevel[1]))
+    
+        elif request.path == '/switches':
+            request.responseHeaders.addRawHeader(b"content-type", b"application/json")    
+            return self.getAllSwitches();
+            
+        elif request.path == '/scenes':
+            request.responseHeaders.addRawHeader(b"content-type", b"application/json")    
+            return self.getAllScenes()
+        
+        elif request.path == '/scene':
+            scene = request.content.read()
+            if scene != "":
+                self.ssh.send('{"CommuniqueType": "CreateRequest","Header": {"Url": "/virtualbutton/%s/commandprocessor"},"Body": {"Command": {"CommandType": "PressAndRelease"}}}\n' % (scene))
+                return
+
+    def getAllSwitches(self):
+        '''Get status of all devices'''
+        self.ssh.channel1.send('{"CommuniqueType":"ReadRequest","Header":{"Url":"/device"}}\n')
+        response = self.ssh.channel1.recv(99999)
+        splitResponse = response.splitlines()
+        if len(splitResponse) == 1:
+            response = splitResponse[0]
+        else:
+            response = splitResponse[1]
+            
+        try:
+            body = json.dumps(json.JSONDecoder().decode(response)) 
+            if (body.find("PRO") != -1):
+                print "Pro Bridge Found"
+                proBridgeSetup()
+                return body
+            elif (body.find("BDG") != -1):
+                print "Standard Bridge Found"
+                return body
+        except ValueError: 
+            print "Not valid JSON~This error may be normal the first time so don't stress!"
+        
+    def getAllScenes(self):
+
+        self.ssh.channel1.send('{"CommuniqueType":"ReadRequest","Header":{"Url":"/virtualbutton"}}\n')
+
+        response = self.ssh.channel1.recv(99999)
+        splitResponse = response.splitlines()
+        if len(splitResponse) == 1:
+            response = splitResponse[0]
+        else:
+            response = splitResponse[1]
+            
+        body = json.dumps(json.JSONDecoder().decode(response)) 
+        return body
+
+    def getAllPicos(self):
+        return
+        
+        
+    
             
 #Client to respond to ssdp requests
 class Client(Base):
@@ -146,7 +180,6 @@ class Client(Base):
     device_target = 'urn:schemas-upnp-org:device:RPi_Lutron_Caseta:%d' % (1)
     
     def __init__(self, iface):
-        print "Running as client"
         self.iface = iface
         self.ssdp = reactor.listenMulticast(SSDP_PORT, self, listenMultiple=True)
         self.ssdp.setLoopbackMode(1)
@@ -167,29 +200,62 @@ class Client(Base):
         lines = [x for x in lines if len(x) > 0]
         headers = [x.split(':', 1) for x in lines]
         headers = dict([(x[0].lower(), x[1]) for x in headers])
-
+        
         search_target = ''
         if 'st' in headers:
             search_target = headers['st']
         
         if cmd[0] == 'M-SEARCH' and cmd[1] == '*' and search_target in self.device_target:
+            print "Your SmartThings Hub IP Address is: " + host
             url = 'http://%s:%d/status' % (determine_ip_for_host(host), 5000)
             response = SEARCH_RESPONSE % (url, search_target, UUID, self.device_target)
             self.ssdp.write(response, (host, port))
- 
+    
+class smartBridgeTELNET:
+    #session = None
+    
+    def __init__(self, bridgeIP):
+        self.bridgeIP = bridgeIP
+        self.session = self.login();
+         
+         
+    def login(self):
+        connection = False
+        self.session = telnetlib.Telnet(self.bridgeIP, 23)
+        while connection is False:
+            print 'Attempting to connect to Lutron Hub'
+            self.session.read_until("login:")
+            self.session.write('lutron\r\n')
+            self.session.read_until("password")
+            self.session.write('integration\r\n')
+            prompt = self.session.read_until('GNET')
+            connection = True
+        print "Successfully Logged in to Lutron Hub"
+        thread3 = Thread(target = self.listenForData)
+        thread3.start()
+        return self.session
+    
+    def listenForData(self):
+        print "Listening for Telnet DATA"
+        while (self.session) :
+            response = self.session.read_some().split(",")
+            if response[0].startswith("~") :
+                for value in response:
+                    print value
+                #[Body:[ZoneStatus:[Level:100, Zone:[href:/zone/5]]], Header:[StatusCode:200 OK, MessageBodyType:OneZoneStatus, Url:/zone/5/status/level], CommuniqueType:ReadResponse]  
+                #'{"CommuniqueType": "CreateRequest","Header": {"Url": "/virtualbutton/%s/commandprocessor"},"Body": {"Command": {"CommandType": "PressAndRelease"}}}\n' % (scene))
+                output = {
+                    "Body" : {"Device" : response[1], "Button" : response[2], "Action" : response[3]},
+                }
+                notifyDevices(json.dumps(output))
+
 #Create the SSH connection to Smart Bridge
 class smartBridgeSSH:
-    shell = None
-    client = None
-    channel = None
-    channel1 = None
-
+    
     #def __init__(self, host, uname, keyfilepath, smartThingsIP):
-    def __init__(self, host, uname, smartThingsIP):
-        self.host = host
-        self.uname = uname
-        self.smartThingsIP = smartThingsIP
-
+    def __init__(self):
+        #self.host = host
+        uname = 'leap'
         key = None
         port = 22
         keyfiletype = 'RSA'
@@ -208,19 +274,17 @@ class smartBridgeSSH:
         # but all host keys will still be accepted.
         # Finally, RejectPolicy will reject all hosts which key is not previously known.
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        
+          
         # Connect to the host.
         if key is not None:
-            # Authenticate with a username and a private key located in a file.
-            print "there is a key"
-            self.client.connect(host, port, uname, None, key)
-        else:
-            # Authenticate with a username and a password.
-            self.client.connect(host, port, uname, pwd)
-        print self.client
+            # Authenticate with a username and a private key
+            self.client.connect(SMARTBRIDGE_IP, port, uname, None, key)
+        
+        #Open a listening channel and a sending channel
         self.channel = self.openChannel()
-
         self.channel1 = self.openChannel()
+        
+        #Create a new thread to continuously listen for output from the Lutron SSH server
         thread1 = Thread(target = self.listenOnChannel)
         thread1.start()
         
@@ -228,10 +292,8 @@ class smartBridgeSSH:
         self.channel.send('{"CommuniqueType":"ReadRequest","Header":{"Url":"/device"}}\n')
         time.sleep(3)
         print self.channel.recv(9999)
-        
-        
+
     def openChannel(self):
-        print self.client
         return self.client.invoke_shell()
         
     def listenOnChannel(self):
@@ -241,16 +303,31 @@ class smartBridgeSSH:
             output = self.channel.recv(9999)
             print output
             
-            self.notifyDevices(output)
+            notifyDevices(output)
             
     def send(self, cmd):
         print "sending cmd" + cmd
         self.channel.send(cmd)
         
-    def notifyDevices(self, output):
-        
+
+'''
+class MyListener(object):
+
+    def remove_service(self, zeroconf, type, name):
+        print("Service %s removed" % (name,))
+
+    def add_service(self, zeroconf, type, name):
+        global SMARTBRIDGE_IP
+        info = zeroconf.get_service_info(type, name)
+        #print ipaddress.IPv4Address(info.address)
+        SMARTBRIDGE_IP = "192.168.1.47" #str(ipaddress.IPv4Address(info.address))
+'''
+
+def notifyDevices(output):
+
+    if SMARTTHINGS_IP:
         body = json.dumps(output)
-        host = 'http://' + self.smartThingsIP + ':39500'
+        host = 'http://' + SMARTTHINGS_IP + ':39500'
         agent = Agent(reactor)
         req = agent.request(
             'POST',
@@ -258,29 +335,80 @@ class smartBridgeSSH:
             Headers({'Content-Type': ['application/json'], 'CONTENT-LENGTH': [str(len(output))]}),
             StringProducer(output)
             )
+    else: 
+        print ("Something is wrong, you'r ST hub wasn't found\nRun the Caseta Service Manager to get started")
+    
+def proBridgeSetup():
+    global PRO_BRIDGE
+    if PRO_BRIDGE == True:
+        return
+    try:
+        telnet = smartBridgeTELNET(SMARTBRIDGE_IP) 
+        PRO_BRIDGE = True
+    except:
+        print "There was an error connecting to your Pro Bridge. Did you turn Telnet on in the Lutron app?"
 
+
+'''         
+def saveData():
+    print "Saving Data"
+    f = open('savedIP', "w")
+    f.write("SMARTTHINGS_IP:" + SMARTTHINGS_IP + "\n")
+    f.write("PRO_BRIDGE:" + str(PRO_BRIDGE) + "\n")
+    f.close
+   
+def setSmartBridgeIP():
+    zeroconf = Zeroconf()
+    listener = MyListener()
+    browser = ServiceBrowser(zeroconf, "_lutron._tcp.local.", listener)
+    while not SMARTBRIDGE_IP:
+        pass
+    print "Your Lutron Smart Bridge IP Address is: " + SMARTBRIDGE_IP
+
+def startup():
+    f = open('savedIP', 'r')
+    global SMARTTHINGS_IP
+    for line in f:
+        if "SMARTTHINGS_IP" in line:
+            SMARTTHINGS_IP = line.split(':')[1].strip()
+            print SMARTTHINGS_IP
+        elif "PRO_BRIDGE" in line:
+            print line.split(':')[1]
+            if line.split(':')[1].strip() == "True":
+                proBridgeSetup()
+            else: 
+                print "You appear to have a standard bridge"
+'''
+    
+def determine_ip_for_host(host = None):
+    """Determine local IP address used to communicate with a particular host"""
+    if (host == None):
+        host = '192.168.1.1'
+    test_sock = DatagramProtocol()
+    test_sock_listener = reactor.listenUDP(0, test_sock)
+    test_sock.transport.connect(host, 1900)
+    my_ip = test_sock.transport.getHost().host
+    test_sock_listener.stopListening()
+    return my_ip
+       
 def main():
     
-    #Please past in the IP Address for your Lutron Smart Bridge and for your SmartThings Hub below!!
-    smartBridgeIP = "192.168.1.22"
-    smartThingsIP = "192.168.1.19"
-
+    #Please paste in the IP Address for your Lutron Smart Bridge and for your SmartThings Hub below!!
+    #smartBridgeIP = "192.168.1.47" #22
+    #smartThingsIP = "192.168.1.19"
+    #setSmartBridgeIP()
+    #startup()
     iface = determine_ip_for_host()
-    device_target = 'urn:schemas-upnp-org:device:RPi_Lutron_Caseta:%d' % (1)
     obj = Client(iface)
     reactor.addSystemEventTrigger('before', 'shutdown', obj.stop)
-    #ssh = smartBridgeSSH(smartBridgeIP, "leap",'rsa_key', smartThingsIP) 
-    ssh = smartBridgeSSH(smartBridgeIP, "leap", smartThingsIP) 
-     # HTTP site to handle subscriptions/polling
+    proBridgeSetup()
+    ssh = smartBridgeSSH() 
+    device_target = 'urn:schemas-upnp-org:device:RPi_Lutron_Caseta:%d' % (1)
     status_site = server.Site(StatusServer(device_target, ssh))
     reactor.listenTCP(5000, status_site) # pylint: disable=no-member
     
+
 if __name__ == "__main__":
-    '''
-    if len(sys.argv) != 3:
-        print "Usage: %s <SmartBridgeIP> <SmartThingsIP>" % (sys.argv[0], )
-        sys.exit(1)
-    smartBridgeIP, smartThingsIP = sys.argv[1:]
-    '''
+
     reactor.callWhenRunning(main)
     reactor.run()
