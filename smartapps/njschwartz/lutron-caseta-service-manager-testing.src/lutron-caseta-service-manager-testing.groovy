@@ -1,7 +1,7 @@
 /**
  *  Lutron Caseta Service Manager 1
  *
- *  Copyright 2016 SmartThings
+ *  Copyright 2016 Nate Schwartz
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -54,8 +54,9 @@ def piDiscovery() {
     }
     // Perform M-SEARCH
     log.debug('Performing discovery')
-    sendHubCommand(new physicalgraph.device.HubAction("lan discovery urn:schemas-upnp-org:device:RPi_Lutron_Caseta:", physicalgraph.device.Protocol.LAN))
-	
+    //sendHubCommand(new physicalgraph.device.HubAction("lan discovery urn:schemas-upnp-org:device:RPi_Lutron_Caseta:", physicalgraph.device.Protocol.LAN))
+	ssdpDiscover()
+    
     //Populate the preferences page with found devices
     def devicesForDialog = getDevicesForDialog()
     if (devicesForDialog != [:]) {
@@ -63,10 +64,18 @@ def piDiscovery() {
     }
     
     return dynamicPage(name:"piDiscovery", title:"RPi Discovery", nextPage:"switchDiscovery", refreshInterval: refreshInterval, uninstall: true) {
-        section("") {
-            input "selectedRPi", "enum", required:false, title:"Select Raspberry Pi \n(${devicesForDialog.size() ?: 0} found)", multiple:true, options:devicesForDialog
-        }
+        section("Select your Raspberry Pi/Server") {
+            input "selectedRPi", "enum", required:false, title:"Select Raspberry Pi \n(${devicesForDialog.size() ?: 0} found)", multiple:false, options:devicesForDialog
+        } 
+        section("Is this a Pro Hub?") {
+        // name is "temperature1", type is "number"
+        input "proHubBool", "bool", title: "ProHub"
     }
+  }
+}
+
+void ssdpDiscover() {
+	 sendHubCommand(new physicalgraph.device.HubAction("lan discovery urn:schemas-upnp-org:device:RPi_Lutron_Caseta:", physicalgraph.device.Protocol.LAN))
 }
 
 //Preferences page to add Lutron Caseta Devices
@@ -81,12 +90,20 @@ def switchDiscovery() {
     	refreshInterval = 100
     }
     
-    return dynamicPage(name:"switchDiscovery", title:"switchDiscovery", nextPage:"sceneDiscovery", refreshInterval: refreshInterval, uninstall: true) {
-        section("Switches") {
-            input "selectedSwitches", "enum", required:false, title:"Select Switches \n(${switchOptions.size() ?: 0} found)", multiple:true, options:switchOptions
+    if (proHubBool) {
+        return dynamicPage(name:"switchDiscovery", title:"switchDiscovery", nextPage:"sceneDiscovery", refreshInterval: refreshInterval, uninstall: true) {
+            section("Switches") {
+                input "selectedSwitches", "enum", required:false, title:"Select Switches \n(${switchOptions.size() ?: 0} found)", multiple:true, options:switchOptions
+            }
+            section("Pico's") {
+                input "selectedPicos", "enum", required:false, title:"Select Pico's \n(${switchOptions.size() ?: 0} found)", multiple:true, options:picoOptions
+            }
         }
-        section("Pico's") {
-            input "selectedPicos", "enum", required:false, title:"Select Pico's \n(${switchOptions.size() ?: 0} found)", multiple:true, options:picoOptions
+    } else { 
+    	return dynamicPage(name:"switchDiscovery", title:"switchDiscovery", nextPage:"sceneDiscovery", refreshInterval: refreshInterval, uninstall: true) {
+            section("Switches") {
+                input "selectedSwitches", "enum", required:false, title:"Select Switches \n(${switchOptions.size() ?: 0} found)", multiple:true, options:switchOptions
+            }
         }
     }
 }
@@ -118,35 +135,24 @@ def ssdpHandler(evt) {
     def parsedEvent = parseDiscoveryMessage(description)
   
     parsedEvent << ["hub":hub]
-    log.debug parsedEvent
     
     if (parsedEvent?.ssdpTerm?.contains("schemas-upnp-org:device:RPi_Lutron_Caseta:")) {
         def devices = getDevices()
 
-        //if (!(devices."${parsedEvent.ssdpUSN.toString()}")) { //if it doesn't already exist
         if (!(devices."${parsedEvent.mac}")) { //if it doesn't already exist
-            //log.debug('Parsed Event: ' + parsedEvent)
-            //devices << ["${parsedEvent.ssdpUSN.toString()}":parsedEvent]
             devices << ["${parsedEvent.mac}":parsedEvent]
         } else { // just update the values
-            //def d = devices."${parsedEvent.ssdpUSN.toString()}"
-            def d = devices."${parsedEvent.ma}"
+            def d = devices."${parsedEvent.mac}"
             boolean deviceChangedValues = false
             if(d.ip != parsedEvent.ip || d.port != parsedEvent.port) {
                 d.ip = parsedEvent.ip
                 d.port = parsedEvent.port
                 deviceChangedValues = true
-            }
-            /* In future handle device changes??
-            if (deviceChangedValues) {
-                def children = getAllChildDevices()
-                children.each {
-                    if (it.getDeviceDataByName("ssdpUSN") == parsedEvent.ssdpUSN) {
-                    }
+                def child = getChildDevice(parsedEvent.mac)
+				if (child) {
+					child.sync(parsedEvent.ip, parsedEvent.port)
                 }
             }
-            */
-
         }
     }
 }
@@ -165,6 +171,7 @@ Map switchesDiscovered() {
 	return devicemap
 }
 
+//Creates a map to populate the picos pref page
 Map picosDiscovered() {
 	def picos = getPicos()
 	def devicemap = [:]
@@ -178,6 +185,7 @@ Map picosDiscovered() {
 	return devicemap
 }
 
+//Creates a map to populate the scenes pref page
 Map scenesDiscovered() {
 	def scenes = getScenes()
 	def devicemap = [:]
@@ -332,6 +340,9 @@ def updated() {
 }
 
 def initialize() {
+	unschedule()
+    unsubscribe()
+    
     log.debug ('Initializing')
     
     def selectedDevices = selectedRPi
@@ -362,11 +373,8 @@ def initialize() {
     }
    
       
-    unschedule()
-    /* Subscribe immediately, then once every ten minutes
-    schedule("0 0/10 * * * ?", subscribeToDevices)
-    subscribeToDevices()
-    */
+    
+    runEvery5Minutes("ssdpDiscover")
 }
 
 def addBridge() {
@@ -380,8 +388,9 @@ def addBridge() {
             dni = devices[ssdpUSN].mac
         }
 */
-		selectedRPi.each { mac ->
-		def dni = devices[mac].mac
+		log.debug "the selected rpi is " + selectedRPi
+		//selectedRPi.each { mac ->
+		def dni = selectedRPi
         // Check if child already exists
         def d = getAllChildDevices()?.find {
             it.device.deviceNetworkId == dni
@@ -389,22 +398,21 @@ def addBridge() {
 
         //Add the Raspberry Pi
         if (!d) {
-            def ip = devices[mac].ip
-            def port = devices[mac].port
-            log.debug("Adding ${dni} for ${mac} / ${ip}:${port}")
-            d = addChildDevice("njschwartz", "Raspberry Pi Lutron Caseta", dni, devices[mac].hub, [
+            def ip = devices[selectedRPi].ip
+            def port = devices[selectedRPi].port
+            log.debug("Adding ${dni} for ${selectedRPi} / ${ip}:${port}")
+            d = addChildDevice("njschwartz", "Raspberry Pi Lutron Caseta", dni, devices[selectedRPi].hub, [
                 "label": "PI/Caseta at: " + convertHexToIP(ip) + ':' + convertHexToInt(port),
                 "data": [
                     "ip": ip,
                     "port": port,
-                    "ssdpUSN": mac,
-                    "ssdpPath": devices[mac].ssdpPath
+                    "ssdpUSN": selectedRPi,
+                    "ssdpPath": devices[selectedRPi].ssdpPath
                 ]
             ])
             d.sendEvent(name: "networkAddress", value: "${ip}:${port}")
         }
         
-    }
 }
 
 def addSwitches() {
