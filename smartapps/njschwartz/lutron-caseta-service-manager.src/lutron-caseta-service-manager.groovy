@@ -92,7 +92,7 @@ def switchDiscovery() {
         }
 
         section("Pico's") {
-            input "selectedPicos", "enum", required:false, title:"Select Pico's \n(${switchOptions.size() ?: 0} found)", multiple:true, options:picoOptions
+            input "selectedPicos", "enum", required:false, title:"Select Pico's \n(${picoOptions.size() ?: 0} found)", multiple:true, options:picoOptions
         }
         section {
         	paragraph "Please note that if you do not have a Pro Hub you cannot use your Pico's to control devices in ST and thus you should ignore this section. Selecting Picos with a standard hub will simply add a useless device into ST."
