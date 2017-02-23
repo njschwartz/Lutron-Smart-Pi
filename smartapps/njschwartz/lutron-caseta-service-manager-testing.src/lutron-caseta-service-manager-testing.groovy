@@ -1,5 +1,5 @@
 /**
- *  Lutron Caseta Service Manager 1
+ *  Lutron Caseta Service Manager
  *
  *  Copyright 2016 Nate Schwartz
  *
@@ -63,15 +63,11 @@ def piDiscovery() {
     	refreshInterval = 100
     }
     
-    return dynamicPage(name:"piDiscovery", title:"RPi Discovery", nextPage:"switchDiscovery", refreshInterval: refreshInterval, uninstall: true) {
+    return dynamicPage(name:"piDiscovery", title:"Server Discovery", nextPage:"switchDiscovery", refreshInterval: refreshInterval, uninstall: true) {
         section("Select your Raspberry Pi/Server") {
             input "selectedRPi", "enum", required:false, title:"Select Raspberry Pi \n(${devicesForDialog.size() ?: 0} found)", multiple:false, options:devicesForDialog
         } 
-        section("Is this a Pro Hub?") {
-        // name is "temperature1", type is "number"
-        input "proHubBool", "bool", title: "ProHub"
     }
-  }
 }
 
 void ssdpDiscover() {
@@ -90,21 +86,17 @@ def switchDiscovery() {
     	refreshInterval = 100
     }
     
-    if (proHubBool) {
-        return dynamicPage(name:"switchDiscovery", title:"switchDiscovery", nextPage:"sceneDiscovery", refreshInterval: refreshInterval, uninstall: true) {
-            section("Switches") {
-                input "selectedSwitches", "enum", required:false, title:"Select Switches \n(${switchOptions.size() ?: 0} found)", multiple:true, options:switchOptions
-            }
-            section("Pico's") {
-                input "selectedPicos", "enum", required:false, title:"Select Pico's \n(${switchOptions.size() ?: 0} found)", multiple:true, options:picoOptions
-            }
+    return dynamicPage(name:"switchDiscovery", title:"Switch Discovery", nextPage:"sceneDiscovery", refreshInterval: refreshInterval, uninstall: true) {
+        section("Switches") {
+            input "selectedSwitches", "enum", required:false, title:"Select Switches \n(${switchOptions.size() ?: 0} found)", multiple:true, options:switchOptions
         }
-    } else { 
-    	return dynamicPage(name:"switchDiscovery", title:"switchDiscovery", nextPage:"sceneDiscovery", refreshInterval: refreshInterval, uninstall: true) {
-            section("Switches") {
-                input "selectedSwitches", "enum", required:false, title:"Select Switches \n(${switchOptions.size() ?: 0} found)", multiple:true, options:switchOptions
-            }
+
+        section("Pico's") {
+            input "selectedPicos", "enum", required:false, title:"Select Pico's \n(${switchOptions.size() ?: 0} found)", multiple:true, options:picoOptions
         }
+        section {
+        	paragraph "Please note that if you do not have a Pro Hub you cannot use your Pico's to control devices in ST and thus you should ignore this section. Selecting Picos with a standard hub will simply add a useless device into ST."
+   		 }
     }
 }
 
@@ -117,8 +109,8 @@ def sceneDiscovery() {
     if (sceneOptions != [:]) {
     	refreshInterval = 100
     }
-    return dynamicPage(name:"sceneDiscovery", title:"sceneDiscovery", nextPage:"", refreshInterval: refreshInterval, install: true, uninstall: true) {
-        section("") {
+    return dynamicPage(name:"sceneDiscovery", title:"Scene Discovery", nextPage:"", refreshInterval: refreshInterval, install: true, uninstall: true) {
+        section("Select your scenes") {
             input "selectedScenes", "enum", required:false, title:"Select Scenes \n(${sceneOptions.size() ?: 0} found)", multiple:true, options:sceneOptions
         }
     }
@@ -133,12 +125,9 @@ def ssdpHandler(evt) {
     def description = evt.description
     def hub = evt?.hubId
     def parsedEvent = parseDiscoveryMessage(description)
-  
     parsedEvent << ["hub":hub]
-    
     if (parsedEvent?.ssdpTerm?.contains("schemas-upnp-org:device:RPi_Lutron_Caseta:")) {
         def devices = getDevices()
-
         if (!(devices."${parsedEvent.mac}")) { //if it doesn't already exist
             devices << ["${parsedEvent.mac}":parsedEvent]
         } else { // just update the values
@@ -240,8 +229,6 @@ private discoverLutronDevices() {
 		headers: [
 			HOST: ip + ":" + port
 		]], "${selectedRPi}", [callback: lutronHandler]))
-        
-
 }
 
 def discoverScenes() {
@@ -270,12 +257,11 @@ def sceneHandler(physicalgraph.device.HubResponse hubResponse) {
     if (body != null) {
         def scenes = getScenes()
         def sceneList = body['Body']['VirtualButtons']
-        
         sceneList.each { k ->
         	def virtButtonNum 
             if(k.IsProgrammed == true) {
             	virtButtonNum = k.href.substring(15)
-            	scenes[k.href] = [id: k.href, name: k.Name, virtualButton: virtButtonNum, dni: "", hub: hubResponse.hubId]
+            	scenes[k.href] = [id: k.href, name: k.Name, virtualButton: virtButtonNum, dni: k.href, hub: hubResponse.hubId]
             }
         }
     }
@@ -285,9 +271,7 @@ def sceneHandler(physicalgraph.device.HubResponse hubResponse) {
 def lutronHandler(physicalgraph.device.HubResponse hubResponse) {
     def body = hubResponse.json
     if (body != null) {
-        log.debug body
         def switches = getSwitches()
-        log.debug "Adding switches to state!"
         def deviceList = body['Body']['Devices']
 		
         deviceList.each { k ->
@@ -297,10 +281,10 @@ def lutronHandler(physicalgraph.device.HubResponse hubResponse) {
             if(k.LocalZones && k.DeviceType == "WallDimmer") {
                 zone = k.LocalZones[0].href.substring(6)
                 log.debug zone
-                switches[k.SerialNumber] = [id: k.SerialNumber, name: k.Name , zone: zone, dni: "", hub: hubResponse.hubId]
+                switches[k.SerialNumber] = [id: k.SerialNumber, name: k.Name , zone: zone, dni: k.SerialNumber, hub: hubResponse.hubId]
             } else if (k.DeviceType == "Pico3ButtonRaiseLower") {
             	device = k.href.substring(8)
-            	picos[k.SerialNumber] = [id: k.SerialNumber, name: k.Name , device: device , dni: "", hub: hubResponse.hubId]
+            	picos[k.SerialNumber] = [id: k.SerialNumber, name: k.Name , device: device , dni: k.SerialNumber, hub: hubResponse.hubId]
             }
         }
     }
@@ -312,7 +296,6 @@ def getDevicesForDialog() {
     def map = [:]
     devices.each {
         def value = convertHexToIP(it.value.ip) + ':' + convertHexToInt(it.value.port)
-        //def key = it.value.ssdpUSN.toString()
         def key = it.value.mac
         map["${key}"] = value
     }
@@ -322,7 +305,6 @@ def getDevicesForDialog() {
 /* Get map containing discovered devices. Maps USN to parsed event. */
 def getDevices() {
     if (!state.devices) { state.devices = [:] }
-    log.debug("There are ${state.devices.size()} found")
     state.devices
 }
 
@@ -333,8 +315,6 @@ def installed() {
 
 def updated() {
 	log.debug "Updated with settings: ${settings}"
-
-
 	unsubscribe()
 	initialize()
 }
@@ -356,12 +336,10 @@ def initialize() {
     	selectedDevices += selectedScenes 
     }
     
-    log.debug "All selected devices are: " + selectedDevices
+    log.debug "The selected devices are: " + selectedDevices + ". Any other devices will be ignored or deleted"
     
     def deleteDevices = (selectedDevices) ? (getChildDevices().findAll { !selectedDevices.contains(it.deviceNetworkId) }) : getAllChildDevices()
-    //log.debug "selected switches are: " + settings.selectedSwitches
-    //log.debug "child devices are: " + getChildDevices()
-    log.debug "DEvices to delete are: " + deleteDevices
+    log.debug "Devices that weill be deleted are: " + deleteDevices
     deleteDevices.each { deleteChildDevice(it.deviceNetworkId) } 
 
     //If a raspberry pi was actually selected add the child device pi and child device switches
@@ -371,8 +349,6 @@ def initialize() {
         addPicos()
         addScenes() 
     }
-   
-      
     
     runEvery5Minutes("ssdpDiscover")
 }
@@ -388,7 +364,6 @@ def addBridge() {
             dni = devices[ssdpUSN].mac
         }
 */
-		log.debug "the selected rpi is " + selectedRPi
 		//selectedRPi.each { mac ->
 		def dni = selectedRPi
         // Check if child already exists
@@ -400,13 +375,13 @@ def addBridge() {
         if (!d) {
             def ip = devices[selectedRPi].ip
             def port = devices[selectedRPi].port
-            log.debug("Adding ${dni} for ${selectedRPi} / ${ip}:${port}")
+            log.debug("Adding your server device with the DNI ${dni} and address ${ip}:${port}")
             d = addChildDevice("njschwartz", "Raspberry Pi Lutron Caseta", dni, devices[selectedRPi].hub, [
                 "label": "PI/Caseta at: " + convertHexToIP(ip) + ':' + convertHexToInt(port),
                 "data": [
                     "ip": ip,
                     "port": port,
-                    "ssdpUSN": selectedRPi,
+                    "ssdpUSN": devices[selectedRPi].ssdpUSN,
                     "ssdpPath": devices[selectedRPi].ssdpPath
                 ]
             ])
@@ -417,14 +392,11 @@ def addBridge() {
 
 def addSwitches() {
 
-    
 	selectedSwitches.each { id ->
     	def allSwitches = getSwitches()
         def name = allSwitches[id].name
         def zone = allSwitches[id].zone
   
-        // Make the dni the appId + the Lutron device serial number
- 		//def dni = app.id + "/" + id
         def dni = id
         //add the dni to the switch state variable for future lookup
         allSwitches[id].dni = dni
@@ -435,9 +407,8 @@ def addSwitches() {
         }
 		def hubId = switches[id].hub
 
-
         if (!d) {
-            log.debug("Adding ${dni} for ${id}")
+            log.debug("Adding ${name} which is Zone ${zone} with DNI ${dni}")
             d = addChildDevice("njschwartz", "Lutron Virtual Dimmer", dni, hubId, [
                 "label": "${name}",
                 "data": [
@@ -446,8 +417,6 @@ def addSwitches() {
                 ]
             ])
         }
-        log.debug "child devices are: " + getChildDevices()
-        
         //Call refresh on the new device to set the initial state
         d.refresh()
     }
@@ -461,7 +430,7 @@ def addPicos() {
         def device = allPicos[id].device
   
         // Make the dni the appId + the Lutron device serial number
- 		def dni = app.id + "/" + id
+ 		def dni = id
         
         //add the dni to the switch state variable for future lookup
         allPicos[id].dni = dni
@@ -474,7 +443,7 @@ def addPicos() {
 
 
         if (!d) {
-            log.debug("Adding ${dni} for ${id}")
+            log.debug("Adding ${name} which is Device ${device} with DNI ${dni}")
             //d = addChildDevice("njschwartz", "Lutron Pico", dni, hubId, [
             d = addChildDevice("stephack", "Lutron Pico", dni, hubId, [
                 "label": "${name}",
@@ -484,7 +453,6 @@ def addPicos() {
                 ]
             ])
         }
-        
         //Call refresh on the new device to set the initial state
         d.refresh()
     }
@@ -492,17 +460,15 @@ def addPicos() {
 
 def addScenes() {
 	def allScenes = getScenes()
-    
 
 	selectedScenes.each { id ->
-    	
         log.debug allScenes
         def name = allScenes[id].name
         def virtButton = allScenes[id].virtualButton
   
         // Make the dni the appId + virtubutton + the Lutron device virtual button number
- 		def dni = app.id + "/virtualbutton" + id
-        
+ 		def dni = allScenes[id].dni
+
         //add the dni to the switch state variable for future lookup
         allScenes[id].dni = dni
 
@@ -514,7 +480,7 @@ def addScenes() {
 
 
         if (!d) {
-            log.debug("Adding ${dni} for ${id}")
+            log.debug("Adding the scene ${name} with the DNI ${dni}")
             d = addChildDevice("njschwartz", "Lutron Scene", dni, hubId, [
                 "label": "${name}",
                 "data": [
@@ -523,9 +489,6 @@ def addScenes() {
                 ]
             ])
         }
-        
-        //Call refresh on the new device to set the initial state
-        d.refresh()
     }
 }
 
@@ -535,33 +498,29 @@ def addScenes() {
 
 //Parse the data from raspberry pi. This is called by the Raspberry Pi device type parse method because that device recieves all the updates sent from the pi back to the hub
 def parse(description) {
-	log.debug description
     def dni
     def children = getAllChildDevices()
     
     if(description['Body']['Device']) {
-    	log.debug "Telnet Response"
+		
         def action = description['Body']['Action'].trim()
-        log.debug "Action is " + action
+        log.debug "Telnet data with action: " + action
         if (action == 4 || action == "4") {
-        	log.debug "action was 4"
             return ""
         }
         def button = description['Body']['Button']
         def device = description['Body']['Device']
-        log.debug "Device name is: " + device
         
         children.each { child ->
         	if (child.getDataValue("device".toString()) == device) {
         		dni = child.getDataValue("dni".toString())
      		}	
         }
-        log.debug dni
+        
         if (dni != Null) {
         	log.debug dni
        	    sendEvent(dni, [name: "button", value: "pushed", data: [buttonNumber: button], descriptionText: "button $button was pushed", isStateChange: true])
         }
-        
         return ""
     }
     
@@ -586,12 +545,9 @@ def parse(description) {
         sendEvent(dni, [name: "level", value: level])
     } else {
     	sendEvent(dni, [name: "switch", value: "off"])
-        //sendEvent(dni, [name: "level", value: level])
     }
          
-/* Example of the response coming from Lutron Caseta through pi device type and to this method
-[Body:[ZoneStatus:[Level:100, Zone:[href:/zone/5]]], Header:[StatusCode:200 OK, MessageBodyType:OneZoneStatus, Url:/zone/5/status/level], CommuniqueType:ReadResponse]      		
-*/
+
 
 }
 
@@ -615,25 +571,19 @@ def refresh(childDevice) {
 
 //Send request to turn light off (level 0)
 def off(childDevice) {
-	log.debug childDevice.device.label
     def switches = getSwitches()
-    //def split = childDevice.device.deviceNetworkId.split("/")
-    //put("/off", switches[split[1]].zone, '0')
     put("/off", switches[childDevice.device.deviceNetworkId].zone, '0')
 }
 
 //Send request to set device to a specific level
 def setLevel(childDevice, level) {
-    log.debug childDevice.data
     def switches = getSwitches()
-    //def split = childDevice.device.deviceNetworkId.split("/")
-    //put("/setLevel", switches[split[1]].zone, level)
     put("/setLevel", switches[childDevice.device.deviceNetworkId].zone, level)
 }
 
 def runScene(childDevice) {
 	def scenes = getScenes()
-    def buttonNum = childDevice.device.deviceNetworkId.split("/")[3]
+    def buttonNum = childDevice.device.deviceNetworkId.split("/")[2]
     put("/scene", buttonNum)
 }
 
@@ -649,7 +599,6 @@ private put(path, body, level = "") {
     }
     def hostHex = ip + ":" + port
 	def content
-    log.debug hostHex
     //If no level then this is just a refresh request
     if (level != "") {
     	content = body + ":" + level
@@ -684,7 +633,6 @@ def subscribeToDevices() {
     log.debug "subscribeToDevices() called"
     def devices = getAllChildDevices()
     devices.each { d ->
-        //log.debug('Call subscribe on '+d.id)
         d.subscribe()
     }
 }
