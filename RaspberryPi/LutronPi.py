@@ -346,7 +346,7 @@ def proBridgeSetup():
         telnet = smartBridgeTELNET(SMARTBRIDGE_IP) 
         PRO_BRIDGE = True
     except:
-        print "There was an error connecting to your Pro Bridge. Did you turn Telnet on in the Lutron app?"
+        print "Unable to connect via Telnet. Either you have a Standard bridge or you forgot to turn on Telnet in the Lutron app!"
 
 
 '''         
