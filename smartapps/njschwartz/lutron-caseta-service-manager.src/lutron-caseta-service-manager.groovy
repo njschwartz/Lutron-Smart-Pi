@@ -16,7 +16,7 @@
 import groovy.json.JsonSlurper
 
 definition(
-		name: "Lutron Caseta Service Manager Testing",
+		name: "Lutron Caseta Service Manager",
 		namespace: "njschwartz",
 		author: "Nate Schwartz",
 		description: "This smartapp is used in conjunction with server code to provide an interface to a Lutron SmartBridge",
