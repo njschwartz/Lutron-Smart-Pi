@@ -83,7 +83,7 @@ def switchDiscovery() {
     def picoOptions = picosDiscovered()
     discoverLutronDevices()
     if (switchOptions != [:]) {
-    	refreshInterval = 100
+    	refreshInterval = 20
     }
     
     return dynamicPage(name:"switchDiscovery", title:"Switch Discovery", nextPage:"sceneDiscovery", refreshInterval: refreshInterval, uninstall: true) {
