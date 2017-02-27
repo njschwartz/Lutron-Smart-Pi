@@ -278,7 +278,7 @@ def lutronHandler(physicalgraph.device.HubResponse hubResponse) {
             def zone
             def device
             
-            if(k.LocalZones && k.DeviceType == "WallDimmer" || k.DeviceType == "PlugInDimmer") {
+            if(k.LocalZones && k.DeviceType == "WallDimmer" || k.DeviceType == "PlugInDimmer" || k.DeviceType == "WallSwitch") {
                 zone = k.LocalZones[0].href.substring(6)
                 log.debug zone
                 switches[k.SerialNumber] = [id: k.SerialNumber, name: k.Name , zone: zone, dni: k.SerialNumber, hub: hubResponse.hubId]
