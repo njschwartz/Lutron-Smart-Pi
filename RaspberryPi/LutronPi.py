@@ -29,8 +29,13 @@ UUID = 'd1c58eb4-9220-11e4-96fa-123b93f75cba'
 SEARCH_RESPONSE = 'HTTP/1.1 200 OK\r\nCACHE-CONTROL:max-age=30\r\nEXT:\r\nLOCATION:%s\r\nSERVER:Linux, UPnP/1.0, Lutron_Pi/1.0\r\nST:%s\r\nUSN:uuid:%s::%s'
 SSDP_ADDR = '239.255.255.250'
 SSDP_PORT = 1900
+
+#Please paste in the IP Address for your Lutron Smart Bridge and for your SmartThings Hub below!!
 SMARTTHINGS_IP = "192.168.1.19"
-SMARTBRIDGE_IP = "192.168.1.47"
+SMARTBRIDGE_IP = "192.168.1.47" #22
+
+
+
 PRO_BRIDGE = False
 MS = 'M-SEARCH * HTTP/1.1\r\nHOST: %s:%d\r\nMAN: "ssdp:discover"\r\nMX: 2\r\nST: ssdp:all\r\n\r\n' % (SSDP_ADDR, SSDP_PORT)
 
@@ -97,9 +102,10 @@ class StatusServer(resource.Resource):
 
     """HTTP server that handles requests from the SmartThings hub"""
     isLeaf = True
-    def __init__(self, device_target, ssh):
+    def __init__(self, device_target, ssh, telnet):
         self.device_target = device_target
         self.ssh = ssh
+        self.telnet = telnet
         resource.Resource.__init__(self)
  
     def render_GET(self, request): # pylint: disable=invalid-name
@@ -131,6 +137,14 @@ class StatusServer(resource.Resource):
             if scene != "":
                 self.ssh.send('{"CommuniqueType": "CreateRequest","Header": {"Url": "/virtualbutton/%s/commandprocessor"},"Body": {"Command": {"CommandType": "PressAndRelease"}}}\n' % (scene))
                 return
+                
+        elif request.path == '/rampLevel':
+            data = request.content.read().split(':')
+            print data[0]
+            print data [1]
+            print data[2]
+            self.telnet.sendCommand(data[0], data[1], data[2] + ":" + data[3])
+            return
 
     def getAllSwitches(self):
         '''Get status of all devices'''
@@ -147,6 +161,7 @@ class StatusServer(resource.Resource):
             if (body.find("PRO") != -1):
                 print "Pro Bridge Found"
                 proBridgeSetup()
+                print body
                 return body
             elif (body.find("BDG") != -1):
                 print "Standard Bridge Found"
@@ -234,6 +249,12 @@ class smartBridgeTELNET:
         thread3 = Thread(target = self.listenForData)
         thread3.start()
         return self.session
+        
+    def sendCommand(self, device, level, rampRate):
+        print "In Send Command"
+        output = "#OUTPUT," + device + ",1," + level + "," + rampRate + "\r\n"
+        print output
+        self.session.write(output)
     
     def listenForData(self):
         print "Listening for Telnet DATA"
@@ -345,6 +366,7 @@ def proBridgeSetup():
     try:
         telnet = smartBridgeTELNET(SMARTBRIDGE_IP) 
         PRO_BRIDGE = True
+        return telnet
     except:
         print "Unable to connect via Telnet. Either you have a Standard bridge or you forgot to turn on Telnet in the Lutron app!"
 
@@ -393,18 +415,14 @@ def determine_ip_for_host(host = None):
        
 def main():
     
-    #Please paste in the IP Address for your Lutron Smart Bridge and for your SmartThings Hub below!!
-    #smartBridgeIP = "192.168.1.47" #22
-    #smartThingsIP = "192.168.1.19"
-    #setSmartBridgeIP()
-    #startup()
+
     iface = determine_ip_for_host()
     obj = Client(iface)
     reactor.addSystemEventTrigger('before', 'shutdown', obj.stop)
-    proBridgeSetup()
+    telnet = proBridgeSetup()
     ssh = smartBridgeSSH() 
     device_target = 'urn:schemas-upnp-org:device:RPi_Lutron_Caseta:%d' % (1)
-    status_site = server.Site(StatusServer(device_target, ssh))
+    status_site = server.Site(StatusServer(device_target, ssh, telnet))
     reactor.listenTCP(5000, status_site) # pylint: disable=no-member
     
 
