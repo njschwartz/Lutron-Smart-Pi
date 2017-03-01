@@ -83,5 +83,5 @@ def updated() {
 }
 
 def initialize() {
-	sendEvent(name: "numberOfButtons", value: 3)
+	sendEvent(name: "numberOfButtons", value: 4)
 }
