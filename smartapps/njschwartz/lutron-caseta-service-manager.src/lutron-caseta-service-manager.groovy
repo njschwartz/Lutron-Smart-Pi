@@ -21,9 +21,9 @@ definition(
 		author: "Nate Schwartz",
 		description: "This smartapp is used in conjunction with server code to provide an interface to a Lutron SmartBridge",
 		category: "SmartThings Labs",
-		iconUrl: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience.png",
-		iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience@2x.png",
-		iconX3Url: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience@2x.png")
+		iconUrl: "https://cdn.rawgit.com/njschwartz/Lutron-Smart-Pi/master/resources/images/Lutron.png",
+		iconX2Url: "https://cdn.rawgit.com/njschwartz/Lutron-Smart-Pi/master/resources/images/Lutron.png",
+		iconX3Url: "https://cdn.rawgit.com/njschwartz/Lutron-Smart-Pi/master/resources/images/Lutron.png",)
 
 
 preferences {
@@ -65,7 +65,7 @@ def piDiscovery() {
     
     return dynamicPage(name:"piDiscovery", title:"Server Discovery", nextPage:"switchDiscovery", refreshInterval: refreshInterval, uninstall: true) {
         section("Select your Raspberry Pi/Server") {
-            input "selectedRPi", "enum", required:false, title:"Select Raspberry Pi \n(${devicesForDialog.size() ?: 0} found)", multiple:false, options:devicesForDialog
+            input "selectedRPi", "enum", required:false, title:"Select Raspberry Pi \n(${devicesForDialog.size() ?: 0} found)", multiple:false, options:devicesForDialog, image: "https://cdn.rawgit.com/njschwartz/Lutron-Smart-Pi/master/resources/images/RaspPi.png"
         } 
     }
 }
@@ -88,11 +88,11 @@ def switchDiscovery() {
     
     return dynamicPage(name:"switchDiscovery", title:"Switch Discovery", nextPage:"sceneDiscovery", refreshInterval: refreshInterval, uninstall: true) {
         section("Switches") {
-            input "selectedSwitches", "enum", required:false, title:"Select Switches \n(${switchOptions.size() ?: 0} found)", multiple:true, options:switchOptions
+            input "selectedSwitches", "enum", required:false, title:"Select Switches \n(${switchOptions.size() ?: 0} found)", multiple:true, options:switchOptions, image: "https://cdn.rawgit.com/njschwartz/Lutron-Smart-Pi/master/resources/images/LutronCasetaSwitch.png"
         }
 
         section("Pico's") {
-            input "selectedPicos", "enum", required:false, title:"Select Pico's \n(${picoOptions.size() ?: 0} found)", multiple:true, options:picoOptions
+            input "selectedPicos", "enum", required:false, title:"Select Pico's \n(${picoOptions.size() ?: 0} found)", multiple:true, options:picoOptions, image: "https://cdn.rawgit.com/njschwartz/Lutron-Smart-Pi/master/resources/images/LutronCasetaPico.png"
         }
         section {
         	paragraph "Please note that if you do not have a Pro Hub you cannot use your Pico's to control devices in ST and thus you should ignore this section. Selecting Picos with a standard hub will simply add a useless device into ST."
@@ -111,7 +111,7 @@ def sceneDiscovery() {
     }
     return dynamicPage(name:"sceneDiscovery", title:"Scene Discovery", nextPage:"", refreshInterval: refreshInterval, install: true, uninstall: true) {
         section("Select your scenes") {
-            input "selectedScenes", "enum", required:false, title:"Select Scenes \n(${sceneOptions.size() ?: 0} found)", multiple:true, options:sceneOptions
+            input "selectedScenes", "enum", required:false, title:"Select Scenes \n(${sceneOptions.size() ?: 0} found)", multiple:true, options:sceneOptions,image: "https://cdn.rawgit.com/njschwartz/Lutron-Smart-Pi/master/resources/images/LutronCasetaScenes.png"
         }
     }
 }
@@ -272,6 +272,7 @@ def lutronHandler(physicalgraph.device.HubResponse hubResponse) {
     def body = hubResponse.json
     if (body != null) {
         def switches = getSwitches()
+        switches.clear()
         def deviceList = body['Body']['Devices']
 		
         deviceList.each { k ->
@@ -280,8 +281,11 @@ def lutronHandler(physicalgraph.device.HubResponse hubResponse) {
             
             if(k.LocalZones && k.DeviceType == "WallDimmer" || k.DeviceType == "PlugInDimmer" || k.DeviceType == "WallSwitch") {
                 zone = k.LocalZones[0].href.substring(6)
+                device = k.href.substring(8)
                 log.debug zone
-                switches[k.SerialNumber] = [id: k.SerialNumber, name: k.Name , zone: zone, dni: k.SerialNumber, hub: hubResponse.hubId]
+                log.debug device
+                switches[k.SerialNumber] = [id: k.SerialNumber, name: k.Name, device: device, zone: zone, dni: k.SerialNumber, hub: hubResponse.hubId, deviceType: k.DeviceType]
+                log.debug switches
             } else if (k.DeviceType == "Pico3ButtonRaiseLower" || k.DeviceType == "Pico2Button") {
             	device = k.href.substring(8)
             	picos[k.SerialNumber] = [id: k.SerialNumber, name: k.Name , device: device , dni: k.SerialNumber, hub: hubResponse.hubId, deviceType: k.DeviceType]
@@ -394,8 +398,12 @@ def addSwitches() {
 
 	selectedSwitches.each { id ->
     	def allSwitches = getSwitches()
+        log.debug allSwitches
         def name = allSwitches[id].name
         def zone = allSwitches[id].zone
+        def device = allSwitches[id].device
+        def deviceType = allSwitches[id].deviceType
+        log.debug "Device is: " + device
   
         def dni = id
         //add the dni to the switch state variable for future lookup
@@ -408,29 +416,50 @@ def addSwitches() {
 		def hubId = switches[id].hub
 
         if (!d) {
-            log.debug("Adding ${name} which is Zone ${zone} with DNI ${dni}")
-            d = addChildDevice("njschwartz", "Lutron Virtual Dimmer", dni, hubId, [
-                "label": "${name}",
-                "data": [
-                	"dni": "${dni}",
-                    "zone": "${zone}" 
-                ]
-            ])
+        	if (deviceType == "WallDimmer" || deviceType == "PlugInDimmer") {
+                log.debug("Adding ${name} which is Zone ${zone}/Device ${device} with DNI ${dni}")
+                d = addChildDevice("njschwartz", "Lutron Virtual Dimmer", dni, hubId, [
+                    "label": "${name}",
+                    "data": [
+                        "dni": "${dni}",
+                        "zone": "${zone}" ,
+                        "device": "${device}",
+                        "deviceType": "${deviceType}"
+                    ]
+                ])
+                d.refresh()
+            } else if (deviceType == "WallSwitch") {
+            	log.debug("Adding ${name} which is Zone ${zone}/Device ${device} with DNI ${dni}")
+                d = addChildDevice("njschwartz", "Lutron Virtual Switch", dni, hubId, [
+                    "label": "${name}",
+                    "data": [
+                        "dni": "${dni}",
+                        "zone": "${zone}" ,
+                        "device": "${device}",
+                        "deviceType": "${deviceType}"
+                    ]
+                ])
+                d.refresh()
+           }
         }
-        //Call refresh on the new device to set the initial state
-        d.refresh()
     }
 }
 
 def addPicos() {
 	def allPicos = getPicos()
-	selectedPicos.each { id ->
+	def name
+    def device
+    def deviceType
+    def dni
+    
+    selectedPicos.each { id ->
     	
-        def name = allPicos[id].name
-        def device = allPicos[id].device
+        name = allPicos[id].name
+        device = allPicos[id].device 
+        deviceType = allPicos[id].deviceType
   
         // Make the dni the appId + the Lutron device serial number
- 		def dni = id
+ 		dni = id
         
         //add the dni to the switch state variable for future lookup
         allPicos[id].dni = dni
@@ -440,33 +469,35 @@ def addPicos() {
             it.device.deviceNetworkId == dni
         }
 		def hubId = picos[id].hub
-		def deviceType = picos[id].deviceType
+
 
         if (!d) {
         	if (deviceType == "Pico3ButtonRaiseLower") {
-	            log.debug("Adding Pico3ButtonRaiseLower ${name} which is Device ${device} with DNI ${dni}")
-	            //d = addChildDevice("njschwartz", "Lutron Pico", dni, hubId, [
-	            d = addChildDevice("njschwartz", "Lutron Pico", dni, hubId, [
-	                "label": "${name}",
-	                "data": [
-	                	"dni": dni,
-	                    "device": device 
-	                ]
-	            ])
-	        } else if (deviceType == "Pico2Button") {
-	            log.debug("Adding Pico2Button ${name} which is Device ${device} with DNI ${dni}")
-	            d = addChildDevice("njschwartz", "Lutron Pico On/Off", dni, hubId, [
-	                "label": "${name}",
-	                "data": [
-	                	"dni": dni,
-	                    "device": device 
-	                ]
-	            ])
+                log.debug("Adding ${name} which is Device ${device} with DNI ${dni}")
+                d = addChildDevice("njschwartz", "Lutron Pico", dni, hubId, [
+                    "label": "${name}",
+                    "data": [
+                        "dni": dni,
+                        "device": device,
+                        "deviceType": "${deviceType}"
+                    ]
+                ])
+               d.refresh()
+            } else if (deviceType == "Pico2Button") {
+            	log.debug("Adding ${name} which is Device ${device} with DNI ${dni}")
+                d = addChildDevice("njschwartz", "Lutron Pico On/Off", dni, hubId, [
+                    "label": "${name}",
+                    "data": [
+                        "dni": dni,
+                        "device": device, 
+                        "deviceType": deviceType
+                    ]
+                ])
+               d.refresh()
             }
-		}
         //Call refresh on the new device to set the initial state
-        d.refresh()
-    }
+   	  }
+   }
 }
 
 def addScenes() {
@@ -515,22 +546,47 @@ def parse(description) {
     if(description['Body']['Device']) {
 		
         def action = description['Body']['Action'].trim()
-        log.debug "Telnet data with action: " + action
         if (action == 4 || action == "4") {
             return ""
         }
         def button = description['Body']['Button']
         def device = description['Body']['Device']
+        def deviceType
         
         children.each { child ->
         	if (child.getDataValue("device".toString()) == device) {
         		dni = child.getDataValue("dni".toString())
+                deviceType = child.getDataValue("deviceType".toString())
      		}	
         }
         
         if (dni != Null) {
-        	log.debug dni
-       	    sendEvent(dni, [name: "button", value: "pushed", data: [buttonNumber: button], descriptionText: "button $button was pushed", isStateChange: true])
+        	if (deviceType == "Pico3ButtonRaiseLower") {
+            	
+            	
+                switch (button) {
+            	   case "2": button = 1
+                    		break
+                   case "3": button = 3
+                    		break
+                   case "4": button = 2
+                    		break
+                   case "5": button = 4
+                    		break
+                   case "6": button = 5
+                    		break
+                }
+                log.debug "Button ${button} was pressed"
+       	    	sendEvent(dni, [name: "button", value: "pushed", data: [buttonNumber: button], descriptionText: "button $button was pushed", isStateChange: true])
+            } else if (deviceType == "Pico2Button") {
+            	if (button == "2") {
+                  button = 1
+                } else {
+                  button = 2
+                }
+                log.debug "Button ${button} was pressed"
+                sendEvent(dni, [name: "button", value: "pushed", data: [buttonNumber: button], descriptionText: "button $button was pushed", isStateChange: true])
+            }
         }
         return ""
     }
@@ -592,6 +648,11 @@ def setLevel(childDevice, level) {
     put("/setLevel", switches[childDevice.device.deviceNetworkId].zone, level)
 }
 
+def setLevel(childDevice, level, rampRate) {
+    def switches = getSwitches()
+    put("/rampLevel", switches[childDevice.device.deviceNetworkId].device, level, rampRate)
+}
+
 def runScene(childDevice) {
 	def scenes = getScenes()
     def buttonNum = childDevice.device.deviceNetworkId.split("/")[2]
@@ -599,7 +660,7 @@ def runScene(childDevice) {
 }
 
 //Function to send the request to pi
-private put(path, body, level = "") {
+private put(path, body, level = "", rampRate= "") {
 	
     def devices = getDevices()
     def ip
@@ -611,7 +672,9 @@ private put(path, body, level = "") {
     def hostHex = ip + ":" + port
 	def content
     //If no level then this is just a refresh request
-    if (level != "") {
+    if (rampRate != "") {
+    	content = body + ":" + level + ":" + rampRate
+    } else if (level != "") {
     	content = body + ":" + level
     } else {
     	content = body
