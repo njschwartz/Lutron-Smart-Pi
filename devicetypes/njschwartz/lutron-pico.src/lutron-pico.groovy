@@ -21,8 +21,7 @@ metadata {
         command "push2"
         command "push3"
         command "push4"
-        command "push5"
-        command "push6"        
+        command "push5"    
 	}
 
 	
@@ -30,31 +29,24 @@ metadata {
 		standardTile("button", "device.button", width: 2, height: 2, canChangeIcon: true, canChangeBackground: true){
 			state "default", label: "", icon: "st.unknown.zwave.remote-controller", backgroundColor: "#ffffff"
 		}
- 		standardTile("push1", "device.button", width: 1, height: 1, decoration: "flat") {
-			state "default", label: "Push 1", backgroundColor: "#ffffff", action: "push1"
-		}
- 		standardTile("push2", "device.button", width: 4, height: 2, decoration: "flat") {
-			state "default", label: "2", icon: "st.Lighting.light11", backgroundColor: "#ffffff", action: "push2"
+ 		standardTile("push1", "device.button", width: 4, height: 2, decoration: "flat") {
+			state "default", label: "1", icon: "st.Lighting.light11", backgroundColor: "#ffffff", action: "push1"
 		}
  		standardTile("push3", "device.button", width: 2, height: 2) {
 			state "default", label: "3", icon: "", backgroundColor: "#ffffff", action: "push3"
 		}
- 		standardTile("push4", "device.button", width: 4, height: 2, decoration: "flat") {
-			state "default", label: "4", icon: "st.Lighting.light13", backgroundColor: "#ffffff", action: "push4"
+ 		standardTile("push2", "device.button", width: 4, height: 2, decoration: "flat") {
+			state "default", label: "2", icon: "st.Lighting.light13", backgroundColor: "#ffffff", action: "push2"
 		} 		
+ 		standardTile("push4", "device.button", width: 1, height: 2, decoration: "flat") {
+			state "default", label: "5", icon: "st.thermostat.thermostat-up", backgroundColor: "#ffffff", action: "push4"
+		}
  		standardTile("push5", "device.button", width: 1, height: 2, decoration: "flat") {
-			state "default", label: "5", icon: "st.thermostat.thermostat-up", backgroundColor: "#ffffff", action: "push5"
+			state "default", label: "5", icon: "st.thermostat.thermostat-down", backgroundColor: "#ffffff", action: "push5"
 		}
- 		standardTile("push6", "device.button", width: 1, height: 2, decoration: "flat") {
-			state "default", label: "6", icon: "st.thermostat.thermostat-down", backgroundColor: "#ffffff", action: "push6"
-		}
- 		standardTile("blank", "device.button", width: 2, height: 2, decoration: "flat") {
-			state "default", label: "", backgroundColor: "#ffffff"
-		}
- 		
 
 		main "button"
-		details(["push2","button","push5","push3","push6","push4"])
+		details(["push1","button","push4","push3","push5","push2"])
 	}
 }
 
@@ -89,10 +81,6 @@ def push5() {
 	push(5)
 }
 
-def push6() {
-	push(6)
-}
-
 
 private push(button) {
 	log.debug "$device.displayName button $button was pushed"
@@ -110,5 +98,5 @@ def updated() {
 }
 
 def initialize() {
-	sendEvent(name: "numberOfButtons", value: 6)
+	sendEvent(name: "numberOfButtons", value: 5)
 }

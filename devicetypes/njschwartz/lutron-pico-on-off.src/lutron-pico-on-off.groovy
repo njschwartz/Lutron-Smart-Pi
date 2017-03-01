@@ -27,22 +27,15 @@ metadata {
 		standardTile("button", "device.button", width: 2, height: 2, canChangeIcon: true, canChangeBackground: true){
 			state "default", label: "", icon: "st.unknown.zwave.remote-controller", backgroundColor: "#ffffff"
 		}
- 		standardTile("push1", "device.button", width: 1, height: 1, decoration: "flat") {
-			state "default", label: "Push 1", backgroundColor: "#ffffff", action: "push1"
+ 		standardTile("push1", "device.button", width: 4, height: 2, decoration: "flat") {
+			state "default", label: "1", icon: "st.Lighting.light11", backgroundColor: "#ffffff", action: "push1"
 		}
  		standardTile("push2", "device.button", width: 4, height: 2, decoration: "flat") {
-			state "default", label: "2", icon: "st.Lighting.light11", backgroundColor: "#ffffff", action: "push2"
-		}
- 		standardTile("push4", "device.button", width: 4, height: 2, decoration: "flat") {
-			state "default", label: "4", icon: "st.Lighting.light13", backgroundColor: "#ffffff", action: "push4"
+			state "default", label: "2", icon: "st.Lighting.light13", backgroundColor: "#ffffff", action: "push2"
 		} 		
- 		standardTile("blank", "device.button", width: 2, height: 2, decoration: "flat") {
-			state "default", label: "", backgroundColor: "#ffffff"
-		}
- 		
 
 		main "button"
-		details(["push2","button","push4"])
+		details(["push1","button","push2"])
 	}
 }
 
@@ -65,10 +58,6 @@ def push2() {
 	push(2)
 }
 
-def push4() {
-	push(4)
-}
-
 private push(button) {
 	log.debug "$device.displayName button $button was pushed"
 	sendEvent(name: "button", value: "pushed", data: [buttonNumber: button], descriptionText: "$device.displayName button $button was pushed", isStateChange: true)
@@ -83,5 +72,5 @@ def updated() {
 }
 
 def initialize() {
-	sendEvent(name: "numberOfButtons", value: 4)
+	sendEvent(name: "numberOfButtons", value: 2)
 }

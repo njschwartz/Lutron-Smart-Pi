@@ -3,6 +3,7 @@ metadata {
         capability "Switch"
         capability "Refresh"
         capability "Switch Level"
+        command "rampLevel"
     }
 
 	// simulator metadata
@@ -12,8 +13,8 @@ metadata {
 	// UI tile definitions
 	tiles {
 		standardTile("button", "device.switch", width: 2, height: 2, canChangeIcon: true) {
-			state "off", label: 'Off', action: "switch.on", icon: "st.Kids.kid10", backgroundColor: "#ffffff", nextState: "on"
-			state "on", label: 'On', action: "switch.off", icon: "st.Kids.kid10", backgroundColor: "#79b821", nextState: "off"
+			state "off", label: 'Off', action: "switch.on", icon: "st.Lighting.light21", backgroundColor: "#ffffff", nextState: "on"
+			state "on", label: 'On', action: "switch.off", icon: "st.Lighting.light21", backgroundColor: "#79b821", nextState: "off"
 		}
 		standardTile("refresh", "device.switch", inactiveLabel: false, decoration: "flat") {
 			state "default", label:'', action:"refresh.refresh", icon:"st.secondary.refresh"
@@ -60,6 +61,12 @@ def setLevel(val) {
 	else if( val > 100) val = 100
     
 	sendEvent(name: "level", value: val)
+}
+
+def rampLevel(level, userRampRate) {
+	parent.setLevel(this, level, userRampRate)
+    sendEvent(name: "level", value: level)
+	sendEvent(name: "switch", value: "on")
 }
 
 def refresh() {
