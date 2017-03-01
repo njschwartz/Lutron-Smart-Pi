@@ -282,9 +282,9 @@ def lutronHandler(physicalgraph.device.HubResponse hubResponse) {
                 zone = k.LocalZones[0].href.substring(6)
                 log.debug zone
                 switches[k.SerialNumber] = [id: k.SerialNumber, name: k.Name , zone: zone, dni: k.SerialNumber, hub: hubResponse.hubId]
-            } else if (k.DeviceType == "Pico3ButtonRaiseLower") {
+            } else if (k.DeviceType == "Pico3ButtonRaiseLower" || k.DeviceType == "Pico2Button") {
             	device = k.href.substring(8)
-            	picos[k.SerialNumber] = [id: k.SerialNumber, name: k.Name , device: device , dni: k.SerialNumber, hub: hubResponse.hubId]
+            	picos[k.SerialNumber] = [id: k.SerialNumber, name: k.Name , device: device , dni: k.SerialNumber, hub: hubResponse.hubId, deviceType: k.DeviceType]
             }
         }
     }
@@ -440,19 +440,30 @@ def addPicos() {
             it.device.deviceNetworkId == dni
         }
 		def hubId = picos[id].hub
-
+		def deviceType = picos[id].deviceType
 
         if (!d) {
-            log.debug("Adding ${name} which is Device ${device} with DNI ${dni}")
-            //d = addChildDevice("njschwartz", "Lutron Pico", dni, hubId, [
-            d = addChildDevice("njschwartz", "Lutron Pico", dni, hubId, [
-                "label": "${name}",
-                "data": [
-                	"dni": dni,
-                    "device": device 
-                ]
-            ])
-        }
+        	if (deviceType == "Pico3ButtonRaiseLower") {
+	            log.debug("Adding Pico3ButtonRaiseLower ${name} which is Device ${device} with DNI ${dni}")
+	            //d = addChildDevice("njschwartz", "Lutron Pico", dni, hubId, [
+	            d = addChildDevice("njschwartz", "Lutron Pico", dni, hubId, [
+	                "label": "${name}",
+	                "data": [
+	                	"dni": dni,
+	                    "device": device 
+	                ]
+	            ])
+	        } else if (deviceType == "Pico2Button") {
+	            log.debug("Adding Pico2Button ${name} which is Device ${device} with DNI ${dni}")
+	            d = addChildDevice("njschwartz", "Lutron Pico On/Off", dni, hubId, [
+	                "label": "${name}",
+	                "data": [
+	                	"dni": dni,
+	                    "device": device 
+	                ]
+	            ])
+            }
+		}
         //Call refresh on the new device to set the initial state
         d.refresh()
     }
