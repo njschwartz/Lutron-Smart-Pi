@@ -1,6 +1,9 @@
 /**
  *  Lutron Caseta Service Manager
  *
+ *		3/01/2017		Version:1.5				Added Ramp Rate control, automatic detection and handling of non dimmer devices, icons updated
+ *		2/23/2017		Version:1.0				Initial Public Release 
+ *
  *  Copyright 2016 Nate Schwartz
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
