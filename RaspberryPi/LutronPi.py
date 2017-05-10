@@ -20,9 +20,31 @@ import telnetlib
 from threading import Thread
 import thread
 import StringIO
+import logging
+from logging.handlers import TimedRotatingFileHandler
 
 #from zeroconf import ServiceBrowser, Zeroconf
 import ipaddress
+
+#Create logger
+logger = logging.getLogger('LutronPi')
+logger.setLevel(logging.DEBUG)
+
+#Create console log handler for backwards compatability
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+formatterCh = logging.Formatter('%(message)s')
+ch.setFormatter(formatterCh)
+
+#Create file logging handler
+fh = logging.handlers.TimedRotatingFileHandler('LutronPi.log', when='midnight')
+fh.setLevel(logging.DEBUG)
+formatterFh = logging.Formatter('%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
+fh.setFormatter(formatterFh)
+
+# Add Console and File Handlers to logger
+logger.addHandler(ch)
+logger.addHandler(fh)
 
 #No idea where this came from but I left it
 UUID = 'd1c58eb4-9220-11e4-96fa-123b93f75cba'
@@ -93,7 +115,7 @@ class Base(DatagramProtocol):
 
     def datagramReceived(self, data, (host, port)):
         first_line = data.rsplit('\r\n')[0]
-        print "Received %s from %r" % (first_line, host, )
+        logger.info("Received %s from %r" % (first_line, host, ))
 
     def stop(self):
         pass
@@ -140,9 +162,9 @@ class StatusServer(resource.Resource):
                 
         elif request.path == '/rampLevel':
             data = request.content.read().split(':')
-            print data[0]
-            print data [1]
-            print data[2]
+            logger.debug(data[0])
+            logger.debug(data [1])
+            logger.debug(data[2])
             self.telnet.sendCommand(data[0], data[1], data[2] + ":" + data[3])
             return
 
@@ -159,15 +181,15 @@ class StatusServer(resource.Resource):
         try:
             body = json.dumps(json.JSONDecoder().decode(response)) 
             if (body.find("PRO") != -1):
-                print "Pro Bridge Found"
+                logger.info("Pro Bridge Found")
                 proBridgeSetup()
-                print body
+                logger.debug(body)
                 return body
             elif (body.find("BDG") != -1):
-                print "Standard Bridge Found"
+                logger.info("Standard Bridge Found")
                 return body
         except ValueError: 
-            print "Not valid JSON~This error may be normal the first time so don't stress!"
+            logger.error("Not valid JSON~This error may be normal the first time so don't stress!")
         
     def getAllScenes(self):
 
@@ -221,7 +243,7 @@ class Client(Base):
             search_target = headers['st']
         
         if cmd[0] == 'M-SEARCH' and cmd[1] == '*' and search_target in self.device_target:
-            print "Your SmartThings Hub IP Address is: " + host
+            logger.info("Your SmartThings Hub IP Address is: " + host)
             url = 'http://%s:%d/status' % (determine_ip_for_host(host), 5000)
             response = SEARCH_RESPONSE % (url, search_target, UUID, self.device_target)
             self.ssdp.write(response, (host, port))
@@ -238,31 +260,31 @@ class smartBridgeTELNET:
         connection = False
         self.session = telnetlib.Telnet(self.bridgeIP, 23)
         while connection is False:
-            print 'Attempting to connect to Lutron Hub'
+            logger.info('Attempting to connect to Lutron Hub')
             self.session.read_until("login:")
             self.session.write('lutron\r\n')
             self.session.read_until("password")
             self.session.write('integration\r\n')
             prompt = self.session.read_until('GNET')
             connection = True
-        print "Successfully Logged in to Lutron Hub"
+        logger.info("Successfully Logged in to Lutron Hub")
         thread3 = Thread(target = self.listenForData)
         thread3.start()
         return self.session
         
     def sendCommand(self, device, level, rampRate):
-        print "In Send Command"
+        logger.debug( "In Send Command")
         output = "#OUTPUT," + device + ",1," + level + "," + rampRate + "\r\n"
-        print output
+        logger.debug(output)
         self.session.write(output)
     
     def listenForData(self):
-        print "Listening for Telnet DATA"
+        logger.info("Listening for Telnet DATA")
         while (self.session) :
             response = self.session.read_some().split(",")
             if response[0].startswith("~") :
                 for value in response:
-                    print value
+                    logger.debug(value)
                 #[Body:[ZoneStatus:[Level:100, Zone:[href:/zone/5]]], Header:[StatusCode:200 OK, MessageBodyType:OneZoneStatus, Url:/zone/5/status/level], CommuniqueType:ReadResponse]  
                 #'{"CommuniqueType": "CreateRequest","Header": {"Url": "/virtualbutton/%s/commandprocessor"},"Body": {"Command": {"CommandType": "PressAndRelease"}}}\n' % (scene))
                 output = {
@@ -312,22 +334,22 @@ class smartBridgeSSH:
     def initalize(self):
         self.channel.send('{"CommuniqueType":"ReadRequest","Header":{"Url":"/device"}}\n')
         time.sleep(3)
-        print self.channel.recv(9999)
+        logger.debug(self.channel.recv(9999))
 
     def openChannel(self):
         return self.client.invoke_shell()
         
     def listenOnChannel(self):
         while not self.channel.exit_status_ready():
-            print "Listening"
+            logger.info("Listening")
             # Only print data if there is data to read in the channel
             output = self.channel.recv(9999)
-            print output
+            logger.debug(output)
             
             notifyDevices(output)
             
     def send(self, cmd):
-        print "sending cmd" + cmd
+        logger.info("sending cmd" + cmd)
         self.channel.send(cmd)
         
 
@@ -357,7 +379,7 @@ def notifyDevices(output):
             StringProducer(output)
             )
     else: 
-        print ("Something is wrong, you'r ST hub wasn't found\nRun the Caseta Service Manager to get started")
+        logger.error("Something is wrong, you'r ST hub wasn't found\nRun the Caseta Service Manager to get started")
     
 def proBridgeSetup():
     global PRO_BRIDGE
@@ -368,7 +390,7 @@ def proBridgeSetup():
         PRO_BRIDGE = True
         return telnet
     except:
-        print "Unable to connect via Telnet. Either you have a Standard bridge or you forgot to turn on Telnet in the Lutron app!"
+        logger.error("Unable to connect via Telnet. Either you have a Standard bridge or you forgot to turn on Telnet in the Lutron app!")
 
 
 '''         
@@ -414,8 +436,6 @@ def determine_ip_for_host(host = None):
     return my_ip
        
 def main():
-    
-
     iface = determine_ip_for_host()
     obj = Client(iface)
     reactor.addSystemEventTrigger('before', 'shutdown', obj.stop)
@@ -424,7 +444,7 @@ def main():
     device_target = 'urn:schemas-upnp-org:device:RPi_Lutron_Caseta:%d' % (1)
     status_site = server.Site(StatusServer(device_target, ssh, telnet))
     reactor.listenTCP(5000, status_site) # pylint: disable=no-member
-    
+
 
 if __name__ == "__main__":
 
