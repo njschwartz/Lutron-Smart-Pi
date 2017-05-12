@@ -39,7 +39,7 @@ metadata {
 			state "default", label: "2", icon: "st.Lighting.light13", backgroundColor: "#ffffff", action: "push2"
 		} 		
  		standardTile("push4", "device.button", width: 1, height: 2, decoration: "flat") {
-			state "default", label: "4", icon: "st.thermostat.thermostat-up", backgroundColor: "#ffffff", action: "push4"
+			state "default", label: "5", icon: "st.thermostat.thermostat-up", backgroundColor: "#ffffff", action: "push4"
 		}
  		standardTile("push5", "device.button", width: 1, height: 2, decoration: "flat") {
 			state "default", label: "5", icon: "st.thermostat.thermostat-down", backgroundColor: "#ffffff", action: "push5"
@@ -52,13 +52,24 @@ metadata {
 
 def parse(description) {
 	log.debug description.data.buttonNumber
-    buttonEvent(description.data.buttonNumber)
+    if (description.data.action) {
+    	buttonEvent(description.data.buttonNumber, description.data.action)
+    } else {
+    	buttonEvent(description.data.buttonNumber)
+    }
 }
 
 def buttonEvent(button) {
 	button = button as Integer
-    log.debug "In button event " + button
+    log.debug "In button event " + button + action
     createEvent(name: "button", value: "pushed", data: [buttonNumber: button], descriptionText: "$device.displayName button $button was pushed", isStateChange: true)
+}
+
+def buttonEvent(button, action) {
+	button = button as Integer
+    log.debug "In button event " + button + action
+    //createEvent(name: "button", value: "pushed", data: [buttonNumber: button], descriptionText: "$device.displayName button $button was pushed", isStateChange: true)
+    createEvent(name: "button", value: action, data: [buttonNumber: button], descriptionText: "$device.displayName button $button was pushed", isStateChange: true)
 }
 
 def push1() {
