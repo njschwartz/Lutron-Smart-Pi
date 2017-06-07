@@ -39,7 +39,7 @@ metadata {
 			state "default", label: "2", icon: "st.Lighting.light13", backgroundColor: "#ffffff", action: "push2"
 		} 		
  		standardTile("push4", "device.button", width: 1, height: 2, decoration: "flat") {
-			state "default", label: "5", icon: "st.thermostat.thermostat-up", backgroundColor: "#ffffff", action: "push4"
+			state "default", label: "4", icon: "st.thermostat.thermostat-up", backgroundColor: "#ffffff", action: "push4"
 		}
  		standardTile("push5", "device.button", width: 1, height: 2, decoration: "flat") {
 			state "default", label: "5", icon: "st.thermostat.thermostat-down", backgroundColor: "#ffffff", action: "push5"
